@@ -6,6 +6,9 @@ import EntradasTab from './components/EntradasTab';
 import { fetchEventConfig, updateEventName } from './hooks/useSupabase';
 import './App.css';
 
+const ENTRADAS_PASSWORD = 'ivan2026';
+
+
 
 const TABS = [
   { id: 'vender', label: 'Vender', icon: '💳' },
@@ -23,6 +26,45 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pos_active_tab', activeTab);
   }, [activeTab]);
+
+  // Contraseña para Entradas
+  const [entradasUnlocked, setEntradasUnlocked] = useState(
+    () => sessionStorage.getItem('entradas_ok') === '1'
+  );
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [passInput, setPassInput] = useState('');
+  const [passError, setPassError] = useState(false);
+  const passInputRef = useRef(null);
+
+  const handleTabClick = (tabId) => {
+    if (tabId === 'entradas' && !entradasUnlocked) {
+      setShowPassModal(true);
+      setPassInput('');
+      setPassError(false);
+      setTimeout(() => passInputRef.current?.focus(), 200);
+    } else {
+      setActiveTab(tabId);
+    }
+  };
+
+  const submitPassword = () => {
+    if (passInput === ENTRADAS_PASSWORD) {
+      sessionStorage.setItem('entradas_ok', '1');
+      setEntradasUnlocked(true);
+      setShowPassModal(false);
+      setActiveTab('entradas');
+    } else {
+      setPassError(true);
+      setPassInput('');
+      setTimeout(() => passInputRef.current?.focus(), 50);
+    }
+  };
+
+  const handlePassKey = (e) => {
+    if (e.key === 'Enter') submitPassword();
+    if (e.key === 'Escape') setShowPassModal(false);
+  };
+
   const [eventName, setEventName] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -99,13 +141,14 @@ export default function App() {
             {TABS.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className={`tab-btn ${activeTab === tab.id ? 'tab-active' : ''}`}
               >
                 <span className="tab-icon">{tab.icon}</span>
                 <span className="tab-label">{tab.label}</span>
               </button>
             ))}
+
           </nav>
         </div>
       </header>
@@ -116,8 +159,36 @@ export default function App() {
         {activeTab === 'productos' && <ProductosTab />}
         {activeTab === 'entradas' && <EntradasTab eventName={eventName} />}
         {activeTab === 'reportes' && <ReportesTab eventName={eventName} />}
-
       </main>
+
+      {/* ─── Password Modal ─── */}
+      {showPassModal && (
+        <div className="pass-overlay" onClick={(e) => e.target === e.currentTarget && setShowPassModal(false)}>
+          <div className="pass-sheet">
+            <div className="pass-handle" />
+            <div className="pass-icon">🔐</div>
+            <div className="pass-title">Sección de Entradas</div>
+            <p className="pass-sub">Ingresá la clave para acceder</p>
+            <input
+              ref={passInputRef}
+              type="password"
+              className="pass-input"
+              placeholder="••••••••"
+              value={passInput}
+              onChange={(e) => { setPassInput(e.target.value); setPassError(false); }}
+              onKeyDown={handlePassKey}
+              autoComplete="current-password"
+            />
+            {passError && (
+              <p className="pass-error">Clave incorrecta. Intentá de nuevo.</p>
+            )}
+            <button className="pass-btn" onClick={submitPassword}>
+              Ingresar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
