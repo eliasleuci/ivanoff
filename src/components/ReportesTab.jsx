@@ -76,7 +76,7 @@ export default function ReportesTab({ eventName }) {
 
   /* ─── CSV Export ─── */
   const handleCSV = () => {
-    const header = 'Ticket,Fecha,Hora,Producto,Cantidad,Precio unitario,Subtotal,Total\n';
+    const header = 'Ticket;Fecha;Hora;Producto;Cantidad;Precio unitario;Subtotal;Total\n';
     const rows = sales.flatMap((sale) => {
       const d = new Date(sale.created_at);
       const fecha = d.toLocaleDateString('es-AR');
@@ -92,7 +92,7 @@ export default function ReportesTab({ eventName }) {
           item.price,
           item.subtotal,
           sale.total,
-        ].join(',')
+        ].join(';')
       );
     });
     const csv = header + rows.join('\n');
