@@ -81,13 +81,23 @@ export async function updateEventName(name) {
 /* ───────────────── RESET DAY ───────────────── */
 
 export async function resetDaySales() {
-  const { error: e1 } = await supabase
+  // 1. Reset products (update one by one to avoid bulk-update restrictions)
+  const { data: products, error: fetchErr } = await supabase
     .from('products')
-    .update({ sold: 0 })
-    .gte('sold', 0); // matches all rows
+    .select('id');
+  
+  if (fetchErr) throw fetchErr;
 
-  if (e1) throw e1;
+  if (products && products.length > 0) {
+    const promises = products.map((p) =>
+      supabase.from('products').update({ sold: 0 }).eq('id', p.id)
+    );
+    const results = await Promise.all(promises);
+    const err = results.find((r) => r.error);
+    if (err) throw err.error;
+  }
 
+  // 2. Reset ticket counter
   const { error: e2 } = await supabase
     .from('event_config')
     .update({ ticket_counter: 1 })
