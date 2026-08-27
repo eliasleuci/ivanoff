@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS products (
 -- Tabla de ventas
 CREATE TABLE IF NOT EXISTS sales (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_num integer NOT NULL UNIQUE,
+  ticket_num integer NOT NULL,
   items jsonb NOT NULL,
   total numeric NOT NULL,
   created_at timestamptz DEFAULT now()
