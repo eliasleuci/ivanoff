@@ -1,0 +1,502 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   THEME TOKENS (TailwindCSS v4)
+   ───────────────────────────────────────────── */
+@theme {
+  --color-bg-dark: #14110f;
+  --color-card: #1d1915;
+  --color-card-alt: #24201b;
+  --color-accent: #2dd4a8;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ─────────────────────────────────────────────
+   BASE
+   ───────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg-dark);
+  color: #e4e4e7;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* ─────────────────────────────────────────────
+   CUSTOM UTILITY CLASSES
+   ───────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-display);
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+.bg-card {
+  background-color: var(--color-card);
+}
+.bg-card-alt {
+  background-color: var(--color-card-alt);
+}
+.text-accent {
+  color: var(--color-accent);
+}
+.bg-accent {
+  background-color: var(--color-accent);
+}
+.border-accent {
+  border-color: var(--color-accent);
+}
+
+/* Touch-friendly utility */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* ─────────────────────────────────────────────
+   LAYOUT
+   ───────────────────────────────────────────── */
+.app-root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background-color: var(--color-card);
+  border-bottom: 1px solid #27272a;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: blur(12px);
+}
+
+.header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-content {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+@media (min-width: 640px) {
+  .header-inner {
+    padding: 12px 24px;
+    gap: 16px;
+  }
+  .app-content {
+    padding: 24px;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   TAB BAR
+   ───────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  background: var(--color-bg-dark);
+  padding: 3px;
+  border-radius: 14px;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: #71717a;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.tab-btn:hover {
+  color: #a1a1aa;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.tab-active {
+  background: var(--color-card-alt);
+  color: var(--color-accent);
+  box-shadow: 0 2px 8px rgba(45, 212, 168, 0.08);
+}
+
+.tab-icon {
+  font-size: 15px;
+}
+
+.tab-label {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .tab-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+  .tab-icon {
+    font-size: 16px;
+  }
+  .tab-label {
+    display: inline;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   FORM INPUTS
+   ───────────────────────────────────────────── */
+.input-field {
+  background: var(--color-card);
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #e4e4e7;
+  font-family: var(--font-display);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+  min-height: 44px; /* touch-friendly */
+}
+.input-field:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(45, 212, 168, 0.1);
+}
+.input-field::placeholder {
+  color: #52525b;
+}
+
+.input-field-sm {
+  background: var(--color-bg-dark);
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #e4e4e7;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  min-height: 36px;
+}
+.input-field-sm:focus {
+  border-color: var(--color-accent);
+}
+
+/* ─────────────────────────────────────────────
+   BUTTONS
+   ───────────────────────────────────────────── */
+.btn-accent {
+  background: var(--color-accent);
+  color: #14110f;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  touch-action: manipulation;
+  min-height: 44px;
+}
+.btn-accent:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 16px rgba(45, 212, 168, 0.2);
+}
+.btn-accent:active {
+  transform: scale(0.98);
+}
+.btn-accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #a1a1aa;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  touch-action: manipulation;
+  min-height: 44px;
+}
+.btn-outline:hover,
+.btn-outline:active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(45, 212, 168, 0.04);
+}
+
+/* ─────────────────────────────────────────────
+   MOBILE CART FAB + BOTTOM SHEET
+   ───────────────────────────────────────────── */
+.mobile-cart-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 16px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-card-alt);
+  border: 1px solid #3f3f46;
+  border-radius: 50px;
+  padding: 12px 18px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mobile-cart-fab:active {
+  transform: scale(0.95);
+}
+
+.mobile-cart-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: #14110f;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+.mobile-cart-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.15s ease;
+}
+
+.mobile-cart-sheet {
+  width: 100%;
+  max-height: 85vh;
+  max-height: 85dvh;
+  background: var(--color-card-alt);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.25s ease;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* Safe area for bottom notch */
+.safe-area-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+}
+
+/* ─────────────────────────────────────────────
+   TICKET PRINT STYLES
+   ───────────────────────────────────────────── */
+.ticket-print {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  .mobile-cart-fab,
+  .mobile-cart-overlay {
+    display: none !important;
+  }
+
+  .ticket-print {
+    display: block !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 80mm;
+    z-index: 9999;
+    background: white;
+  }
+
+  .ticket-inner {
+    padding: 6mm 4mm;
+    font-family: 'Courier New', monospace;
+    color: #000;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .ticket-header {
+    text-align: center;
+    margin-bottom: 4mm;
+  }
+
+  .ticket-event-name {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0 0 2px;
+    word-break: break-word;
+  }
+
+  .ticket-subtitle {
+    font-size: 9px;
+    color: #666;
+    margin: 0;
+    letter-spacing: 1px;
+  }
+
+  .ticket-info {
+    margin-bottom: 2mm;
+  }
+
+  .ticket-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+  }
+
+  .ticket-num {
+    font-weight: bold;
+    font-size: 14px;
+  }
+
+  .ticket-divider {
+    text-align: center;
+    color: #999;
+    font-size: 8px;
+    margin: 2mm 0;
+    overflow: hidden;
+  }
+
+  .ticket-items {
+    margin-bottom: 2mm;
+  }
+
+  .ticket-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1mm;
+  }
+
+  .ticket-item-name {
+    flex: 1;
+    font-size: 12px;
+  }
+
+  .ticket-item-price {
+    font-size: 12px;
+    font-weight: bold;
+    text-align: right;
+    min-width: 18mm;
+  }
+
+  .ticket-total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 2mm 0;
+  }
+
+  .ticket-footer {
+    text-align: center;
+    margin-top: 3mm;
+    font-size: 10px;
+  }
+
+  .ticket-footer-small {
+    font-size: 8px;
+    color: #999;
+    margin-top: 2mm;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   MOBILE HEADER
+   ───────────────────────────────────────────── */
+@media (max-width: 639px) {
+  .header-inner {
+    flex-wrap: wrap;
+  }
+}
