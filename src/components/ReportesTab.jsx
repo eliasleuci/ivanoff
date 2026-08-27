@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   fetchProducts,
   fetchSales,
+  fetchEventConfig,
   resetDaySales,
 } from '../hooks/useSupabase';
 
@@ -13,9 +14,29 @@ export default function ReportesTab({ eventName }) {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [prods, sls] = await Promise.all([fetchProducts(), fetchSales()]);
+      const [prods, sls, config] = await Promise.all([
+        fetchProducts(), 
+        fetchSales(),
+        fetchEventConfig()
+      ]);
       setProducts(prods || []);
-      setSales(sls || []);
+      
+      const allSales = sls || [];
+      // Filtrar solo las ventas del turno actual (ticket_num decreciente)
+      if (config.ticket_counter === 1) {
+        setSales([]);
+      } else {
+        const shiftSales = [];
+        let expectedNext = null;
+        for (const sale of allSales) {
+          if (expectedNext !== null && sale.ticket_num >= expectedNext) {
+            break; // cruzamos al turno anterior
+          }
+          shiftSales.push(sale);
+          expectedNext = sale.ticket_num;
+        }
+        setSales(shiftSales);
+      }
     } catch (err) {
       console.error(err);
     } finally {
