@@ -12,7 +12,13 @@ const TABS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('vender');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('pos_active_tab') || 'vender';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pos_active_tab', activeTab);
+  }, [activeTab]);
   const [eventName, setEventName] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
