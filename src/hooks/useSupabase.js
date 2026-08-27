@@ -81,12 +81,16 @@ export async function updateEventName(name) {
 /* ───────────────── RESET DAY ───────────────── */
 
 export async function resetDaySales() {
-  // 1. Reset products (update one by one to avoid bulk-update restrictions)
+  console.log('[resetDaySales] Iniciando reseteo...');
+  // 1. Reset products
   const { data: products, error: fetchErr } = await supabase
     .from('products')
     .select('id');
   
-  if (fetchErr) throw fetchErr;
+  if (fetchErr) {
+    console.error('[resetDaySales] Error al obtener productos:', fetchErr);
+    throw fetchErr;
+  }
 
   if (products && products.length > 0) {
     const promises = products.map((p) =>
@@ -94,14 +98,22 @@ export async function resetDaySales() {
     );
     const results = await Promise.all(promises);
     const err = results.find((r) => r.error);
-    if (err) throw err.error;
+    if (err) {
+      console.error('[resetDaySales] Error al actualizar un producto:', err.error);
+      throw err.error;
+    }
   }
 
+  console.log('[resetDaySales] Productos reseteados. Reseteando ticket_counter...');
   // 2. Reset ticket counter
   const { error: e2 } = await supabase
     .from('event_config')
     .update({ ticket_counter: 1 })
     .eq('id', 1);
 
-  if (e2) throw e2;
+  if (e2) {
+    console.error('[resetDaySales] Error al actualizar event_config:', e2);
+    throw e2;
+  }
+  console.log('[resetDaySales] Reseteo exitoso.');
 }

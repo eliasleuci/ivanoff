@@ -85,7 +85,7 @@ export default function App() {
                 </h1>
               )}
               <p className="text-xs text-zinc-500 font-mono">
-                POS • {new Date().toLocaleDateString('es-AR')}
+                POS v1.1 • {new Date().toLocaleDateString('es-AR')}
               </p>
             </div>
           </div>
