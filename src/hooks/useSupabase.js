@@ -117,3 +117,58 @@ export async function resetDaySales() {
   }
   console.log('[resetDaySales] Reseteo exitoso.');
 }
+
+/* ───────────────── EVENT TICKETS ───────────────── */
+
+export async function createEventTicket({ buyerName, ticketType, price, paymentMethod }) {
+  // Generar un código único para el QR usando crypto
+  const raw = crypto.randomUUID();
+  const ticketCode = `EVT-${raw.toUpperCase()}`;
+
+  const { data, error } = await supabase
+    .from('event_tickets')
+    .insert([{
+      ticket_code: ticketCode,
+      buyer_name: buyerName || null,
+      ticket_type: ticketType,
+      price: Number(price),
+      payment_method: paymentMethod,
+      used: false,
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function validateTicket(ticketCode) {
+  const { data, error } = await supabase.rpc('validate_ticket', {
+    p_ticket_code: ticketCode,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchEventTickets() {
+  const { data, error } = await supabase
+    .from('event_tickets')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteEventTicket(id) {
+  const { error } = await supabase.from('event_tickets').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteAllEventTickets() {
+  // Delete all rows — filter by created_at >= epoch so it matches everything
+  const { error } = await supabase
+    .from('event_tickets')
+    .delete()
+    .gte('created_at', '2000-01-01');
+  if (error) throw error;
+}
+

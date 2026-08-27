@@ -2,14 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import VenderTab from './components/VenderTab';
 import ProductosTab from './components/ProductosTab';
 import ReportesTab from './components/ReportesTab';
+import EntradasTab from './components/EntradasTab';
 import { fetchEventConfig, updateEventName } from './hooks/useSupabase';
 import './App.css';
+
 
 const TABS = [
   { id: 'vender', label: 'Vender', icon: '💳' },
   { id: 'productos', label: 'Productos', icon: '📦' },
+  { id: 'entradas', label: 'Entradas', icon: '🏟️' },
   { id: 'reportes', label: 'Reportes', icon: '📊' },
 ];
+
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
@@ -110,7 +114,9 @@ export default function App() {
       <main className="app-content">
         {activeTab === 'vender' && <VenderTab eventName={eventName} />}
         {activeTab === 'productos' && <ProductosTab />}
+        {activeTab === 'entradas' && <EntradasTab eventName={eventName} />}
         {activeTab === 'reportes' && <ReportesTab eventName={eventName} />}
+
       </main>
     </div>
   );
