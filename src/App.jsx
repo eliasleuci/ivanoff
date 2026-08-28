@@ -16,7 +16,7 @@ function PublicTicketViewer({ ticketCode }) {
         width: 280,
         margin: 2,
         color: { dark: '#14110f', light: '#ffffff' },
-        errorCorrectionLevel: 'H',
+        errorCorrectionLevel: 'M',
       });
     }
   }, [ticketCode]);

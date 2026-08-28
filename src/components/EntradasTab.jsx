@@ -53,7 +53,7 @@ function QRModal({ ticket, eventName, onClose }) {
         width: size,
         margin: 2,
         color: { dark: '#14110f', light: '#ffffff' },
-        errorCorrectionLevel: 'H',
+        errorCorrectionLevel: 'M',
       }).then(() => setQrReady(true));
     }
   }, [ticket]);
@@ -429,18 +429,22 @@ function EscanearEntrada() {
     container.innerHTML = '';
 
     try {
-      const scanner = new Html5Qrcode('qr-reader-el');
+      const scanner = new Html5Qrcode('qr-reader-el', {
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      });
       html5QrRef.current = scanner;
 
       await scanner.start(
         { facingMode: 'environment' },
         {
-          fps: 15,
+          fps: 10,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
             const edge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
-              width: Math.floor(edge * 0.72),
-              height: Math.floor(edge * 0.72),
+              width: Math.floor(edge * 0.85),
+              height: Math.floor(edge * 0.85),
             };
           },
         },
