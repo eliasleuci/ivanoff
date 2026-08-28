@@ -31,6 +31,12 @@ function QRModal({ ticket, eventName, onClose }) {
   const [phone, setPhone] = useState('');
   const [copied, setCopied] = useState(false);
   const [qrReady, setQrReady] = useState(false);
+  const [canShareFiles, setCanShareFiles] = useState(false);
+
+  // Detect Web Share API support on mount
+  useEffect(() => {
+    setCanShareFiles(!!(navigator.canShare && navigator.share));
+  }, []);
 
   // Prevent body scroll when modal open
   useEffect(() => {
@@ -38,9 +44,9 @@ function QRModal({ ticket, eventName, onClose }) {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
+  // Generate QR onto canvas
   useEffect(() => {
     if (canvasRef.current && ticket) {
-      // Use screen width to decide QR size
       const size = Math.min(window.innerWidth - 80, 260);
       QRCode.toCanvas(canvasRef.current, ticket.ticket_code, {
         width: size,
@@ -51,6 +57,21 @@ function QRModal({ ticket, eventName, onClose }) {
     }
   }, [ticket]);
 
+  const typeInfo = TICKET_TYPES.find((t) => t.id === ticket.ticket_type) || TICKET_TYPES[0];
+
+  const buildMessage = () => [
+    `🎟️ *ENTRADA — ${eventName || 'Evento'}*`,
+    ``,
+    `👤 *${ticket.buyer_name || 'Sin nombre'}*`,
+    `🏷️ Tipo: ${ticket.ticket_type}`,
+    `💰 Precio: ${fmt(ticket.price)}`,
+    `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 📲'}`,
+    ``,
+    `🔑 Código: \`${ticket.ticket_code}\``,
+    ``,
+    `⚠️ _Entrada personal e intransferible._`,
+  ].join('\n');
+
   const downloadQR = () => {
     if (!canvasRef.current) return;
     const link = document.createElement('a');
@@ -59,51 +80,25 @@ function QRModal({ ticket, eventName, onClose }) {
     link.click();
   };
 
-  const buildMessage = () => [
-    `🏟️ *ENTRADA — ${eventName || 'Evento'}*`,
-    ``,
-    `👤 *${ticket.buyer_name || 'Sin nombre'}*`,
-    `🏷️ Tipo: ${ticket.ticket_type}`,
-    `💰 Precio: ${fmt(ticket.price)}`,
-    `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 💳'}`,
-    ``,
-    `🔑 Código: \`${ticket.ticket_code}\``,
-    ``,
-    `⚠️ _Entrada personal e intransferible._`,
-  ].join('\n');
-
-  // Web Share API — adjunta el QR automáticamente
-  const shareWithQR = async () => {
-    if (!canvasRef.current) return;
-    const message = buildMessage();
-
-    return new Promise((resolve) => {
-      canvasRef.current.toBlob(async (blob) => {
-        const file = new File([blob], `entrada-${ticket.ticket_type}-${ticket.ticket_code.slice(4, 10)}.png`, { type: 'image/png' });
-        try {
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], text: message, title: `Entrada ${ticket.ticket_type}` });
-            resolve('shared');
-            return;
-          }
-        } catch (e) {
-          if (e.name !== 'AbortError') console.warn('Share failed:', e);
-        }
-        resolve('fallback');
-      }, 'image/png');
-    });
-  };
-
-  // Envío: primero intenta Web Share, si no abre wa.me
   const sendWhatsApp = async () => {
     const num = phone.replace(/\D/g, '');
-    const result = await shareWithQR();
-    if (result === 'fallback') {
-      downloadQR();
-      if (num) {
-        const msg = encodeURIComponent(buildMessage());
-        window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+    // Try Web Share API (mobile — attaches QR image automatically)
+    if (canvasRef.current) {
+      const blob = await new Promise((res) => canvasRef.current.toBlob(res, 'image/png'));
+      const file = new File([blob], `entrada-${ticket.ticket_type}.png`, { type: 'image/png' });
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], text: buildMessage(), title: `Entrada ${ticket.ticket_type}` });
+          return; // done — image was shared
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') return; // user cancelled, do nothing
       }
+    }
+    // Fallback: download QR + open wa.me
+    downloadQR();
+    if (num) {
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent(buildMessage())}`, '_blank');
     }
   };
 
@@ -113,12 +108,9 @@ function QRModal({ ticket, eventName, onClose }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const typeInfo = TICKET_TYPES.find((t) => t.id === ticket.ticket_type) || TICKET_TYPES[0];
-
   return (
     <div className="qrm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="qrm-sheet">
-        {/* Drag handle (mobile) */}
         <div className="qrm-handle" />
 
         {/* Header */}
@@ -135,7 +127,7 @@ function QRModal({ ticket, eventName, onClose }) {
 
         {/* Scrollable body */}
         <div className="qrm-body">
-          {/* QR */}
+          {/* QR canvas */}
           <div className="qrm-qr-wrap">
             <div className="qrm-qr-frame" style={{ borderColor: typeInfo.color }}>
               <canvas ref={canvasRef} style={{ display: qrReady ? 'block' : 'none' }} />
@@ -181,7 +173,7 @@ function QRModal({ ticket, eventName, onClose }) {
             </div>
 
             {canShareFiles ? (
-              /* MOBILE: Web Share API — el QR se adjunta solo */
+              /* MOBILE: Web Share API — QR se adjunta automáticamente */
               <>
                 <button className="qrm-wa-share-btn" onClick={sendWhatsApp}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -192,7 +184,7 @@ function QRModal({ ticket, eventName, onClose }) {
                 <p className="qrm-wa-hint">📎 El QR se adjunta automáticamente. Solo elegí el contacto en WhatsApp.</p>
               </>
             ) : (
-              /* DESKTOP FALLBACK: número + wa.me */
+              /* DESKTOP / fallback: número + wa.me */
               <>
                 <div className="qrm-wa-row">
                   <div className="qrm-wa-prefix">+</div>
@@ -205,11 +197,7 @@ function QRModal({ ticket, eventName, onClose }) {
                     onChange={(e) => setPhone(e.target.value)}
                     maxLength={20}
                   />
-                  <button
-                    className="qrm-wa-btn"
-                    onClick={sendWhatsApp}
-                    disabled={!phone.trim()}
-                  >
+                  <button className="qrm-wa-btn" onClick={sendWhatsApp} disabled={!phone.trim()}>
                     Enviar
                   </button>
                 </div>
@@ -217,17 +205,12 @@ function QRModal({ ticket, eventName, onClose }) {
               </>
             )}
           </div>
-
         </div>
 
-        {/* Footer actions */}
+        {/* Footer */}
         <div className="qrm-footer">
-          <button className="qrm-btn-outline" onClick={downloadQR}>
-            ⬇ Descargar QR
-          </button>
-          <button className="qrm-btn-primary" onClick={onClose}>
-            Listo ✓
-          </button>
+          <button className="qrm-btn-outline" onClick={downloadQR}>⬇ Descargar QR</button>
+          <button className="qrm-btn-primary" onClick={onClose}>Listo ✓</button>
         </div>
       </div>
     </div>
