@@ -4,7 +4,73 @@ import ProductosTab from './components/ProductosTab';
 import ReportesTab from './components/ReportesTab';
 import EntradasTab from './components/EntradasTab';
 import { fetchEventConfig, updateEventName } from './hooks/useSupabase';
+import QRCode from 'qrcode';
 import './App.css';
+
+function PublicTicketViewer({ ticketCode }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (canvasRef.current && ticketCode) {
+      QRCode.toCanvas(canvasRef.current, ticketCode, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#14110f', light: '#ffffff' },
+        errorCorrectionLevel: 'H',
+      });
+    }
+  }, [ticketCode]);
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#14110f',
+      padding: '20px',
+      textAlign: 'center',
+      fontFamily: '"Space Grotesk", sans-serif'
+    }}>
+      <div style={{
+        background: '#ffffff',
+        padding: '24px',
+        borderRadius: '24px',
+        boxShadow: '0 8px 32px rgba(45,212,168,0.2)'
+      }}>
+        <h1 style={{ color: '#14110f', margin: '0 0 16px', fontSize: '24px', fontWeight: 'bold' }}>🎟️ Tu Entrada</h1>
+        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }} />
+        <p style={{ color: '#52525b', margin: '16px 0 0', fontSize: '15px', fontWeight: '600' }}>
+          Presentá este QR en la puerta.
+        </p>
+      </div>
+      <button 
+        style={{
+          marginTop: '32px',
+          padding: '14px 28px',
+          background: 'rgba(255,255,255,0.05)',
+          border: '1.5px solid #3f3f46',
+          color: '#e4e4e7',
+          borderRadius: '16px',
+          fontWeight: '700',
+          cursor: 'pointer',
+          fontSize: '15px'
+        }}
+        onClick={() => {
+          if(!canvasRef.current) return;
+          const link = document.createElement('a');
+          link.download = `entrada-${ticketCode.slice(4,12)}.png`;
+          link.href = canvasRef.current.toDataURL();
+          link.click();
+        }}
+      >
+        ⬇ Descargar imagen
+      </button>
+    </div>
+  );
+}
+
 
 const ENTRADAS_PASSWORD = 'ivan2026';
 
@@ -19,9 +85,16 @@ const TABS = [
 
 
 export default function App() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const publicTicket = urlParams.get('ticket');
+
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('pos_active_tab') || 'vender';
   });
+
+  if (publicTicket) {
+    return <PublicTicketViewer ticketCode={publicTicket} />;
+  }
 
   useEffect(() => {
     localStorage.setItem('pos_active_tab', activeTab);

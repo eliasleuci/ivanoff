@@ -6,6 +6,7 @@ import {
   validateTicket,
   fetchEventTickets,
   deleteAllEventTickets,
+  deleteEventTicket,
 } from '../hooks/useSupabase';
 
 
@@ -59,18 +60,25 @@ function QRModal({ ticket, eventName, onClose }) {
 
   const typeInfo = TICKET_TYPES.find((t) => t.id === ticket.ticket_type) || TICKET_TYPES[0];
 
-  const buildMessage = () => [
-    `🎟️ *ENTRADA — ${eventName || 'Evento'}*`,
-    ``,
-    `👤 *${ticket.buyer_name || 'Sin nombre'}*`,
-    `🏷️ Tipo: ${ticket.ticket_type}`,
-    `💰 Precio: ${fmt(ticket.price)}`,
-    `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 📲'}`,
-    ``,
-    `🔑 Código: \`${ticket.ticket_code}\``,
-    ``,
-    `⚠️ _Entrada personal e intransferible._`,
-  ].join('\n');
+  const buildMessage = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('ticket', ticket.ticket_code);
+    const ticketUrl = url.toString();
+
+    return [
+      `🎟️ *ENTRADA — ${eventName || 'Evento'}*`,
+      ``,
+      `👤 *${ticket.buyer_name || 'Sin nombre'}*`,
+      `🏷️ Tipo: ${ticket.ticket_type}`,
+      `💰 Precio: ${fmt(ticket.price)}`,
+      `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 📲'}`,
+      ``,
+      `📍 *Link de tu entrada (código QR):*`,
+      ticketUrl,
+      ``,
+      `⚠️ _Entrada personal e intransferible._`,
+    ].join('\n');
+  };
 
   const downloadQR = () => {
     if (!canvasRef.current) return;
@@ -80,10 +88,9 @@ function QRModal({ ticket, eventName, onClose }) {
     link.click();
   };
 
-  const sendDirectWhatsApp = () => {
+  const sendDirectWhatsApp = async () => {
     const num = phone.replace(/\D/g, '');
     if (!num) return;
-    downloadQR();
     const msg = encodeURIComponent(buildMessage());
     window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
   };
@@ -205,7 +212,9 @@ function QRModal({ ticket, eventName, onClose }) {
                 Enviar
               </button>
             </div>
-            <p className="qrm-wa-hint">Descarga el QR y abre el chat directo con el mensaje listo.</p>
+            <p className="qrm-wa-hint">
+              Abre el chat directo. <b>Enviará un link para que el invitado vea y guarde su QR</b>, sin necesidad de adjuntar imágenes.
+            </p>
           </div>
         </div>
 
@@ -377,23 +386,28 @@ function EscanearEntrada() {
   const cleanupScanner = useCallback(async () => {
     if (html5QrRef.current) {
       try {
-        if (html5QrRef.current.isScanning) {
-          await html5QrRef.current.stop();
-        }
-      } catch (_) {}
+        // Attempt to stop unconditionally. If it's not scanning, it safely throws an error.
+        await html5QrRef.current.stop();
+      } catch (err) {
+        console.warn('html5qrcode stop error:', err);
+      }
       try {
         html5QrRef.current.clear();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('html5qrcode clear error:', err);
+      }
       html5QrRef.current = null;
     }
 
     // Force stop any active video tracks on the page
     try {
-      const videoEl = document.querySelector('#qr-reader-el video');
-      if (videoEl && videoEl.srcObject) {
-        videoEl.srcObject.getTracks().forEach((track) => track.stop());
-        videoEl.srcObject = null;
-      }
+      const videos = document.querySelectorAll('video');
+      videos.forEach((video) => {
+        if (video.srcObject) {
+          video.srcObject.getTracks().forEach((track) => track.stop());
+          video.srcObject = null;
+        }
+      });
     } catch (_) {}
 
     setScanning(false);
@@ -460,7 +474,24 @@ function EscanearEntrada() {
   }, [cleanupScanner]);
 
   useEffect(() => {
+    const handleUnload = () => {
+      // Synchronous attempt to release camera when reloading/closing
+      if (html5QrRef.current) {
+         try { html5QrRef.current.stop(); } catch(e){}
+      }
+      try {
+        document.querySelectorAll('video').forEach(v => {
+          if (v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
+        });
+      } catch(e) {}
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
       cleanupScanner();
     };
   }, [cleanupScanner]);
@@ -519,9 +550,14 @@ function EscanearEntrada() {
       <div className="scan-active-wrap">
         <div id="qr-reader-el" className="qr-reader-el" />
         <p className="scan-active-hint">Apuntá la cámara al código QR</p>
-        <button className="scan-cancel-btn" onClick={cleanupScanner}>
-          Cancelar
-        </button>
+        <div className="scan-controls">
+          <button className="scan-cancel-btn" onClick={cleanupScanner}>
+            Cancelar
+          </button>
+          <button className="scan-restart-btn" onClick={startScanner}>
+            <span>🔄</span> Reiniciar
+          </button>
+        </div>
       </div>
     );
   }
@@ -551,6 +587,7 @@ function ListadoEntradas({ refresh }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -564,11 +601,31 @@ function ListadoEntradas({ refresh }) {
     }
   }, []);
 
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Seguro que querés eliminar esta entrada? Esta acción no se puede deshacer.')) {
+      setLoading(true);
+      try {
+        await deleteEventTicket(id);
+        await load();
+      } catch (err) {
+        console.error(err);
+        alert('Error al eliminar la entrada');
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => { load(); }, [load, refresh]);
 
   const filtered = tickets.filter((t) => {
-    if (filter === 'pending') return !t.used;
-    if (filter === 'used') return t.used;
+    if (filter === 'pending' && t.used) return false;
+    if (filter === 'used' && !t.used) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const name = t.buyer_name ? t.buyer_name.toLowerCase() : '';
+      const code = t.ticket_code ? t.ticket_code.toLowerCase() : '';
+      if (!name.includes(q) && !code.includes(q)) return false;
+    }
     return true;
   });
 
@@ -608,7 +665,15 @@ function ListadoEntradas({ refresh }) {
       </div>
 
       {/* Filter + refresh */}
-      <div className="ls-filters">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <input
+          type="text"
+          className="ls-search-bar"
+          placeholder="🔍 Buscar por nombre o código..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div className="ls-filters">
         {[
           { id: 'all', label: 'Todas' },
           { id: 'pending', label: '⏳ Pend.' },
@@ -623,6 +688,7 @@ function ListadoEntradas({ refresh }) {
           </button>
         ))}
         <button className="ls-refresh-btn" onClick={load}>↻</button>
+      </div>
       </div>
 
       {/* List */}
@@ -643,15 +709,24 @@ function ListadoEntradas({ refresh }) {
                 />
                 <div className="ls-card-body">
                   <div className="ls-card-top">
-                    <span
-                      className="ls-type-chip"
-                      style={{ background: ti.bg, color: ti.color }}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span
+                        className="ls-type-chip"
+                        style={{ background: ti.bg, color: ti.color }}
+                      >
+                        {ti.emoji} {t.ticket_type}
+                      </span>
+                      <span className={`ls-status ${t.used ? 'ls-status--used' : 'ls-status--pen'}`}>
+                        {t.used ? '✓ Usada' : '⏳ Pendiente'}
+                      </span>
+                    </div>
+                    <button 
+                      className="ls-delete-btn" 
+                      onClick={() => handleDelete(t.id)}
+                      title="Eliminar entrada"
                     >
-                      {ti.emoji} {t.ticket_type}
-                    </span>
-                    <span className={`ls-status ${t.used ? 'ls-status--used' : 'ls-status--pen'}`}>
-                      {t.used ? '✓ Usada' : '⏳ Pendiente'}
-                    </span>
+                      🗑️
+                    </button>
                   </div>
                   <div className="ls-card-name">{t.buyer_name || 'Sin nombre'}</div>
                   <div className="ls-card-meta">
