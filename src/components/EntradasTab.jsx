@@ -80,25 +80,24 @@ function QRModal({ ticket, eventName, onClose }) {
     link.click();
   };
 
-  const sendWhatsApp = async () => {
+  const sendDirectWhatsApp = () => {
     const num = phone.replace(/\D/g, '');
-    // Try Web Share API (mobile — attaches QR image automatically)
-    if (canvasRef.current) {
-      const blob = await new Promise((res) => canvasRef.current.toBlob(res, 'image/png'));
-      const file = new File([blob], `entrada-${ticket.ticket_type}.png`, { type: 'image/png' });
-      try {
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], text: buildMessage(), title: `Entrada ${ticket.ticket_type}` });
-          return; // done — image was shared
-        }
-      } catch (e) {
-        if (e.name === 'AbortError') return; // user cancelled, do nothing
-      }
-    }
-    // Fallback: download QR + open wa.me
+    if (!num) return;
     downloadQR();
-    if (num) {
-      window.open(`https://wa.me/${num}?text=${encodeURIComponent(buildMessage())}`, '_blank');
+    const msg = encodeURIComponent(buildMessage());
+    window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+  };
+
+  const shareWithQR = async () => {
+    if (!canvasRef.current) return;
+    const blob = await new Promise((res) => canvasRef.current.toBlob(res, 'image/png'));
+    const file = new File([blob], `entrada-${ticket.ticket_type}.png`, { type: 'image/png' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: buildMessage(), title: `Entrada ${ticket.ticket_type}` });
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('Share error:', e);
     }
   };
 
@@ -163,7 +162,7 @@ function QRModal({ ticket, eventName, onClose }) {
             </button>
           </div>
 
-          {/* WhatsApp */}
+          {/* WhatsApp Options */}
           <div className="qrm-wa-card">
             <div className="qrm-wa-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366">
@@ -172,38 +171,41 @@ function QRModal({ ticket, eventName, onClose }) {
               Enviar por WhatsApp
             </div>
 
-            {canShareFiles ? (
-              /* MOBILE: Web Share API — QR se adjunta automáticamente */
-              <>
-                <button className="qrm-wa-share-btn" onClick={sendWhatsApp}>
+            {/* Opción 1: Compartir nativo (si soporta adjuntar archivos) */}
+            {canShareFiles && (
+              <div className="qrm-wa-share-section">
+                <button className="qrm-wa-share-btn" onClick={shareWithQR}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                   </svg>
                   Compartir QR + mensaje
                 </button>
-                <p className="qrm-wa-hint">📎 El QR se adjunta automáticamente. Solo elegí el contacto en WhatsApp.</p>
-              </>
-            ) : (
-              /* DESKTOP / fallback: número + wa.me */
-              <>
-                <div className="qrm-wa-row">
-                  <div className="qrm-wa-prefix">+</div>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    className="qrm-wa-input"
-                    placeholder="549xxxxxxxxxx"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    maxLength={20}
-                  />
-                  <button className="qrm-wa-btn" onClick={sendWhatsApp} disabled={!phone.trim()}>
-                    Enviar
-                  </button>
-                </div>
-                <p className="qrm-wa-hint">El QR se descarga y abrís WhatsApp con el mensaje listo.</p>
-              </>
+                <p className="qrm-wa-hint">📎 Adjunta el QR y te deja elegir el contacto en WhatsApp.</p>
+                <div className="qrm-wa-divider"><span>o ingresar número directo</span></div>
+              </div>
             )}
+
+            {/* Opción 2: Enviar por número directo */}
+            <div className="qrm-wa-row">
+              <div className="qrm-wa-prefix">+</div>
+              <input
+                type="tel"
+                inputMode="numeric"
+                className="qrm-wa-input"
+                placeholder="549xxxxxxxxxx"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                maxLength={20}
+              />
+              <button
+                className="qrm-wa-btn"
+                onClick={sendDirectWhatsApp}
+                disabled={!phone.trim()}
+              >
+                Enviar
+              </button>
+            </div>
+            <p className="qrm-wa-hint">Descarga el QR y abre el chat directo con el mensaje listo.</p>
           </div>
         </div>
 
@@ -230,104 +232,103 @@ function VenderEntrada({ eventName, onGenerated }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const selectedType = TICKET_TYPES.find((t) => t.id === form.ticketType) || TICKET_TYPES[0];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.price || Number(form.price) < 0) {
-      setError('Ingresá un precio válido.');
+    setError('');
+
+    const priceNum = parseFloat(form.price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      setError('Ingresá un precio válido (0 o mayor).');
       return;
     }
-    setError('');
+
     setLoading(true);
     try {
-      const ticket = await createEventTicket(form);
+      const ticket = await createEventTicket({
+        buyerName: form.buyerName.trim() || 'Sin nombre',
+        ticketType: form.ticketType,
+        price: priceNum,
+        paymentMethod: form.paymentMethod,
+      });
+      // Reset form
+      setForm((prev) => ({ ...prev, buyerName: '', price: '' }));
       onGenerated(ticket);
-      setForm({ buyerName: '', ticketType: 'General', price: '', paymentMethod: 'efectivo' });
     } catch (err) {
-      setError(err.message || 'Error al crear la entrada.');
+      console.error(err);
+      setError(err.message || 'Error al generar la entrada.');
     } finally {
       setLoading(false);
     }
   };
 
-  const selectedType = TICKET_TYPES.find((t) => t.id === form.ticketType);
-
   return (
     <div className="vender-wrap">
-      <form onSubmit={handleSubmit} className="vender-form" noValidate>
-
-        {/* Tipo de entrada — big visual selector */}
+      <form className="vender-form" onSubmit={handleSubmit}>
+        {/* Type selector */}
         <div className="vf-section">
           <label className="vf-label">Tipo de entrada</label>
           <div className="vf-type-grid">
-            {TICKET_TYPES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`vf-type-card ${form.ticketType === t.id ? 'vf-type-card--active' : ''}`}
-                style={form.ticketType === t.id ? {
-                  borderColor: t.color,
-                  background: t.bg,
-                } : {}}
-                onClick={() => set('ticketType', t.id)}
-              >
-                <span className="vf-type-emoji">{t.emoji}</span>
-                <span className="vf-type-label" style={form.ticketType === t.id ? { color: t.color } : {}}>
-                  {t.label}
-                </span>
-                {form.ticketType === t.id && (
-                  <span className="vf-type-check" style={{ color: t.color }}>✓</span>
-                )}
-              </button>
-            ))}
+            {TICKET_TYPES.map((t) => {
+              const active = form.ticketType === t.id;
+              return (
+                <button
+                  type="button"
+                  key={t.id}
+                  onClick={() => setForm((p) => ({ ...p, ticketType: t.id }))}
+                  className={`vf-type-card ${active ? 'vf-type-card--active' : ''}`}
+                  style={active ? { borderColor: t.color, background: t.bg, color: t.color } : {}}
+                >
+                  <span className="vf-type-emoji">{t.emoji}</span>
+                  <span className="vf-type-label">{t.label}</span>
+                  {active && <span className="vf-type-check">✓</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Nombre */}
+        {/* Buyer name */}
         <div className="vf-section">
-          <label className="vf-label" htmlFor="buyer-name">
+          <label className="vf-label">
             Nombre del comprador <span className="vf-optional">(opcional)</span>
           </label>
           <input
-            id="buyer-name"
             type="text"
             className="vf-input"
             placeholder="Ej: Juan Pérez"
             value={form.buyerName}
-            onChange={(e) => set('buyerName', e.target.value)}
-            autoComplete="name"
+            onChange={(e) => setForm((p) => ({ ...p, buyerName: e.target.value }))}
           />
         </div>
 
-        {/* Precio */}
+        {/* Price */}
         <div className="vf-section">
-          <label className="vf-label" htmlFor="ticket-price">Precio</label>
+          <label className="vf-label">Precio</label>
           <div className="vf-price-wrap">
             <span className="vf-price-symbol">$</span>
             <input
-              id="ticket-price"
               type="number"
               inputMode="numeric"
               className="vf-input vf-price-input"
               placeholder="0"
               min="0"
-              step="100"
               value={form.price}
-              onChange={(e) => set('price', e.target.value)}
+              onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
               required
             />
           </div>
         </div>
 
-        {/* Método de pago */}
+        {/* Payment method */}
         <div className="vf-section">
           <label className="vf-label">Método de pago</label>
           <div className="vf-pay-grid">
             <button
               type="button"
               className={`vf-pay-btn ${form.paymentMethod === 'efectivo' ? 'vf-pay-btn--active' : ''}`}
-              onClick={() => set('paymentMethod', 'efectivo')}
+              onClick={() => setForm((p) => ({ ...p, paymentMethod: 'efectivo' }))}
             >
               <span className="vf-pay-icon">💵</span>
               <span>Efectivo</span>
@@ -335,7 +336,7 @@ function VenderEntrada({ eventName, onGenerated }) {
             <button
               type="button"
               className={`vf-pay-btn ${form.paymentMethod === 'transferencia' ? 'vf-pay-btn--active' : ''}`}
-              onClick={() => set('paymentMethod', 'transferencia')}
+              onClick={() => setForm((p) => ({ ...p, paymentMethod: 'transferencia' }))}
             >
               <span className="vf-pay-icon">📲</span>
               <span>Transferencia</span>
@@ -345,16 +346,17 @@ function VenderEntrada({ eventName, onGenerated }) {
 
         {error && <div className="vf-error">{error}</div>}
 
+        {/* Submit */}
         <button
           type="submit"
           className="vf-submit"
           disabled={loading}
-          style={!loading ? { background: selectedType?.color } : {}}
+          style={{ background: selectedType.color }}
         >
           {loading ? (
             <span className="vf-spinner" />
           ) : (
-            <>{selectedType?.emoji} Generar Entrada {selectedType?.label}</>
+            `Generar entrada ${selectedType.label}`
           )}
         </button>
       </form>
@@ -370,31 +372,71 @@ function EscanearEntrada() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const html5QrRef = useRef(null);
+  const isProcessingRef = useRef(false);
 
-  const stopScanner = useCallback(async () => {
+  const cleanupScanner = useCallback(async () => {
     if (html5QrRef.current) {
       try {
-        await html5QrRef.current.stop();
+        if (html5QrRef.current.isScanning) {
+          await html5QrRef.current.stop();
+        }
+      } catch (_) {}
+      try {
         html5QrRef.current.clear();
-      } catch (_) { /* ignore */ }
+      } catch (_) {}
       html5QrRef.current = null;
     }
+
+    // Force stop any active video tracks on the page
+    try {
+      const videoEl = document.querySelector('#qr-reader-el video');
+      if (videoEl && videoEl.srcObject) {
+        videoEl.srcObject.getTracks().forEach((track) => track.stop());
+        videoEl.srcObject = null;
+      }
+    } catch (_) {}
+
     setScanning(false);
   }, []);
 
   const startScanner = useCallback(async () => {
+    await cleanupScanner();
     setResult(null);
     setScanning(true);
-    await new Promise((r) => setTimeout(r, 150));
+
+    // Wait a moment for React to mount the DOM container #qr-reader-el
+    await new Promise((r) => setTimeout(r, 200));
+
+    const container = document.getElementById('qr-reader-el');
+    if (!container) {
+      setScanning(false);
+      return;
+    }
+    container.innerHTML = '';
+
     try {
       const scanner = new Html5Qrcode('qr-reader-el');
       html5QrRef.current = scanner;
+
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        {
+          fps: 15,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const edge = Math.min(viewfinderWidth, viewfinderHeight);
+            return {
+              width: Math.floor(edge * 0.72),
+              height: Math.floor(edge * 0.72),
+            };
+          },
+        },
         async (decoded) => {
-          await stopScanner();
+          if (!decoded || isProcessingRef.current) return;
+          isProcessingRef.current = true;
+
+          await cleanupScanner();
           setLoading(true);
+
           try {
             const res = await validateTicket(decoded);
             setResult(res);
@@ -402,19 +444,31 @@ function EscanearEntrada() {
             setResult({ status: 'error', message: err.message });
           } finally {
             setLoading(false);
+            isProcessingRef.current = false;
           }
         },
         () => {}
       );
     } catch (err) {
-      setScanning(false);
-      setResult({ status: 'camera_error', message: 'No se pudo acceder a la cámara. Verificá los permisos.' });
+      console.error('Error starting scanner:', err);
+      await cleanupScanner();
+      setResult({
+        status: 'camera_error',
+        message: 'No se pudo acceder a la cámara. Verificá los permisos del navegador.',
+      });
     }
-  }, [stopScanner]);
+  }, [cleanupScanner]);
 
-  useEffect(() => () => { stopScanner(); }, [stopScanner]);
+  useEffect(() => {
+    return () => {
+      cleanupScanner();
+    };
+  }, [cleanupScanner]);
 
-  const reset = () => { setResult(null); stopScanner(); };
+  const handleScanAgain = () => {
+    setResult(null);
+    startScanner();
+  };
 
   if (loading) {
     return (
@@ -453,7 +507,7 @@ function EscanearEntrada() {
         {result.message && (
           <div className="src-meta">{result.message}</div>
         )}
-        <button className="src-again-btn" onClick={reset}>
+        <button className="src-again-btn" onClick={handleScanAgain}>
           📷 Escanear otra entrada
         </button>
       </div>
@@ -465,7 +519,7 @@ function EscanearEntrada() {
       <div className="scan-active-wrap">
         <div id="qr-reader-el" className="qr-reader-el" />
         <p className="scan-active-hint">Apuntá la cámara al código QR</p>
-        <button className="scan-cancel-btn" onClick={stopScanner}>
+        <button className="scan-cancel-btn" onClick={cleanupScanner}>
           Cancelar
         </button>
       </div>

@@ -965,7 +965,33 @@ body {
   font-weight: 700;
   color: #25d366;
 }
+.qrm-wa-share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qrm-wa-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #2a5a3a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 4px 0;
+}
+.qrm-wa-divider::before,
+.qrm-wa-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #1a3a28;
+}
+.qrm-wa-divider span {
+  padding: 0 10px;
+}
 .qrm-wa-row {
+
   display: flex;
   align-items: center;
   gap: 8px;
