@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'qrcode';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import {
   createEventTicket,
   validateTicket,
@@ -377,29 +377,35 @@ function VenderEntrada({ eventName, onGenerated }) {
    ESCANEAR / VALIDAR
 ══════════════════════════════════════════════════════════ */
 function EscanearEntrada() {
-  const [scanning, setScanning] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const html5QrRef = useRef(null);
   const isProcessingRef = useRef(false);
 
   const cleanupScanner = useCallback(async () => {
-    if (html5QrRef.current) {
+    const scanner = html5QrRef.current;
+    if (scanner) {
       try {
-        // Attempt to stop unconditionally. If it's not scanning, it safely throws an error.
-        await html5QrRef.current.stop();
+        const state = scanner.getState ? scanner.getState() : null;
+        if (
+          state === Html5QrcodeScannerState.SCANNING || 
+          state === Html5QrcodeScannerState.PAUSED
+        ) {
+          await scanner.stop();
+        }
       } catch (err) {
         console.warn('html5qrcode stop error:', err);
       }
       try {
-        html5QrRef.current.clear();
+        scanner.clear();
       } catch (err) {
         console.warn('html5qrcode clear error:', err);
       }
       html5QrRef.current = null;
     }
 
-    // Force stop any active video tracks on the page
+    // Force stop any active video tracks on the page as fallback
     try {
       const videos = document.querySelectorAll('video');
       videos.forEach((video) => {
@@ -410,20 +416,25 @@ function EscanearEntrada() {
       });
     } catch (_) {}
 
-    setScanning(false);
+    setCameraActive(false);
+    setResult(null);
+    setLoading(false);
+    isProcessingRef.current = false;
   }, []);
 
   const startScanner = useCallback(async () => {
     await cleanupScanner();
+    setCameraActive(true);
     setResult(null);
-    setScanning(true);
+    setLoading(false);
+    isProcessingRef.current = false;
 
-    // Wait a moment for React to mount the DOM container #qr-reader-el
+    // Pequeña espera para asegurar que el div #qr-reader-el esté montado
     await new Promise((r) => setTimeout(r, 200));
 
     const container = document.getElementById('qr-reader-el');
     if (!container) {
-      setScanning(false);
+      setCameraActive(false);
       return;
     }
     container.innerHTML = '';
@@ -452,7 +463,16 @@ function EscanearEntrada() {
           if (!decoded || isProcessingRef.current) return;
           isProcessingRef.current = true;
 
-          await cleanupScanner();
+          // En lugar de detener y soltar el stream, lo PAUSAMOS para retener
+          // el permiso en WebKit/iOS sin causar fugas.
+          try {
+            if (html5QrRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
+              html5QrRef.current.pause(true); // true = pause video stream
+            }
+          } catch (e) {
+            console.warn('html5qrcode pause error:', e);
+          }
+
           setLoading(true);
 
           try {
@@ -462,7 +482,6 @@ function EscanearEntrada() {
             setResult({ status: 'error', message: err.message });
           } finally {
             setLoading(false);
-            isProcessingRef.current = false;
           }
         },
         () => {}
@@ -472,14 +491,34 @@ function EscanearEntrada() {
       await cleanupScanner();
       setResult({
         status: 'camera_error',
-        message: 'No se pudo acceder a la cámara. Verificá los permisos del navegador.',
+        message: 'No se pudo acceder a la cámara. Verificá los permisos del navegador o reiniciá.',
       });
     }
   }, [cleanupScanner]);
 
+  const handleScanAgain = () => {
+    setResult(null);
+    isProcessingRef.current = false;
+    
+    // Al reanudar, reactivamos el stream existente (inmediato en iOS)
+    if (html5QrRef.current) {
+      try {
+        const state = html5QrRef.current.getState ? html5QrRef.current.getState() : null;
+        if (state === Html5QrcodeScannerState.PAUSED) {
+          html5QrRef.current.resume();
+        } else if (state !== Html5QrcodeScannerState.SCANNING) {
+          startScanner();
+        }
+      } catch (e) {
+        startScanner();
+      }
+    } else {
+      startScanner();
+    }
+  };
+
   useEffect(() => {
     const handleUnload = () => {
-      // Synchronous attempt to release camera when reloading/closing
       if (html5QrRef.current) {
          try { html5QrRef.current.stop(); } catch(e){}
       }
@@ -490,95 +529,131 @@ function EscanearEntrada() {
       } catch(e) {}
     };
 
+    const handleVisibility = () => {
+      // Apagar cámara limpiamente si el usuario minimiza el navegador
+      if (document.visibilityState === 'hidden') {
+        cleanupScanner();
+      }
+    };
+
     window.addEventListener('beforeunload', handleUnload);
     window.addEventListener('pagehide', handleUnload);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
       window.removeEventListener('pagehide', handleUnload);
+      document.removeEventListener('visibilitychange', handleVisibility);
       cleanupScanner();
     };
   }, [cleanupScanner]);
 
-  const handleScanAgain = () => {
-    setResult(null);
-    startScanner();
-  };
-
-  if (loading) {
+  // Pantalla idle inicial o si el validador vuelve de otra app
+  if (!cameraActive && !result) {
     return (
-      <div className="scan-centered">
-        <div className="scan-big-spinner" />
-        <p className="scan-loading-txt">Validando entrada…</p>
-      </div>
-    );
-  }
-
-  if (result) {
-    const isValid = result.status === 'valid';
-    const isUsed = result.status === 'already_used';
-
-    return (
-      <div className={`scan-result-card ${isValid ? 'src-valid' : isUsed ? 'src-used' : 'src-unknown'}`}>
-        <div className="src-icon">
-          {isValid ? '✅' : isUsed ? '🚫' : '⚠️'}
-        </div>
-        <div className="src-title">
-          {isValid ? 'ENTRADA VÁLIDA' : isUsed ? 'YA UTILIZADA' : result.status === 'not_found' ? 'NO RECONOCIDA' : 'ERROR'}
-        </div>
-        {result.buyer_name && (
-          <div className="src-buyer">{result.buyer_name}</div>
-        )}
-        {result.ticket_type && (
-          <div className="src-type">{result.ticket_type}</div>
-        )}
-        {result.used_at && (
-          <div className="src-meta">
-            Escaneada el {new Date(result.used_at).toLocaleString('es-AR', {
-              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-            })}
+      <div className="scan-idle-wrap">
+        <div className="scan-idle-art">
+          <div className="scan-idle-corners">
+            <span /><span /><span /><span />
           </div>
-        )}
-        {result.message && (
-          <div className="src-meta">{result.message}</div>
-        )}
-        <button className="src-again-btn" onClick={handleScanAgain}>
-          📷 Escanear otra entrada
+          <span className="scan-idle-cam">📷</span>
+        </div>
+        <p className="scan-idle-txt">
+          Activá la cámara para escanear el QR de la entrada en la puerta
+        </p>
+        <button className="scan-start-btn" onClick={startScanner}>
+          Activar cámara
         </button>
       </div>
     );
   }
 
-  if (scanning) {
-    return (
-      <div className="scan-active-wrap">
-        <div id="qr-reader-el" className="qr-reader-el" />
-        <p className="scan-active-hint">Apuntá la cámara al código QR</p>
-        <div className="scan-controls">
-          <button className="scan-cancel-btn" onClick={cleanupScanner}>
-            Cancelar
-          </button>
-          <button className="scan-restart-btn" onClick={startScanner}>
-            <span>🔄</span> Reiniciar
-          </button>
+  // Si cameraActive es true, el DOM del escáner SIEMPRE se debe renderizar, 
+  // ocultándolo visualmente con CSS para no romper la instancia del <video>
+  const showScanner = !loading && !result;
+
+  return (
+    <div className="scan-active-wrap">
+      {/* Contenedor persistente del escáner */}
+      <div 
+        id="qr-reader-el" 
+        className="qr-reader-el" 
+        style={{ display: showScanner ? 'block' : 'none' }}
+      />
+      
+      {showScanner && (
+        <>
+          <p className="scan-active-hint">Apuntá la cámara al código QR</p>
+          <div className="scan-controls">
+            <button className="scan-cancel-btn" onClick={cleanupScanner}>
+              Cancelar
+            </button>
+            <button className="scan-restart-btn" onClick={startScanner}>
+              <span>🔄</span> Reiniciar
+            </button>
+          </div>
+        </>
+      )}
+
+      {loading && (
+        <div className="scan-centered" style={{ marginTop: '20px' }}>
+          <div className="scan-big-spinner" />
+          <p className="scan-loading-txt">Validando entrada…</p>
         </div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: '20px' }}>
+          <ResultCard result={result} onScanAgain={handleScanAgain} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultCard({ result, onScanAgain }) {
+  if (result.status === 'camera_error') {
+    return (
+      <div className="scan-result-card src-unknown">
+        <div className="src-icon">⚠️</div>
+        <div className="src-title">ERROR DE CÁMARA</div>
+        <div className="src-meta">{result.message}</div>
+        <button className="src-again-btn" onClick={onScanAgain}>
+          🔄 Reintentar
+        </button>
       </div>
     );
   }
 
+  const isValid = result.status === 'valid';
+  const isUsed = result.status === 'already_used';
+
   return (
-    <div className="scan-idle-wrap">
-      <div className="scan-idle-art">
-        <div className="scan-idle-corners">
-          <span /><span /><span /><span />
-        </div>
-        <span className="scan-idle-cam">📷</span>
+    <div className={`scan-result-card ${isValid ? 'src-valid' : isUsed ? 'src-used' : 'src-unknown'}`}>
+      <div className="src-icon">
+        {isValid ? '✅' : isUsed ? '🚫' : '⚠️'}
       </div>
-      <p className="scan-idle-txt">
-        Activá la cámara para escanear el QR de la entrada en la puerta
-      </p>
-      <button className="scan-start-btn" onClick={startScanner}>
-        Activar cámara
+      <div className="src-title">
+        {isValid ? 'ENTRADA VÁLIDA' : isUsed ? 'YA UTILIZADA' : result.status === 'not_found' ? 'NO RECONOCIDA' : 'ERROR'}
+      </div>
+      {result.buyer_name && (
+        <div className="src-buyer">{result.buyer_name}</div>
+      )}
+      {result.ticket_type && (
+        <div className="src-type">{result.ticket_type}</div>
+      )}
+      {result.used_at && (
+        <div className="src-meta">
+          Escaneada el {new Date(result.used_at).toLocaleString('es-AR', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+          })}
+        </div>
+      )}
+      {result.message && (
+        <div className="src-meta">{result.message}</div>
+      )}
+      <button className="src-again-btn" onClick={onScanAgain}>
+        📷 Escanear otra entrada
       </button>
     </div>
   );
