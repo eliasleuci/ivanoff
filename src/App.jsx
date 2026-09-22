@@ -45,7 +45,7 @@ function PublicTicketViewer({ ticketCode }) {
           Presentá este QR en la puerta.
         </p>
       </div>
-      <button 
+      <button
         style={{
           marginTop: '32px',
           padding: '14px 28px',
@@ -72,7 +72,9 @@ function PublicTicketViewer({ ticketCode }) {
 }
 
 
-const ENTRADAS_PASSWORD = 'ivan2026';
+const ENTRADAS_PASSWORD = 'adm2026';
+const APP_USER = 'controldegestion';
+const APP_PASSWORD = 'administrador2026';
 
 
 
@@ -91,6 +93,38 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('pos_active_tab') || 'vender';
   });
+
+  // Login general de la app
+  const [loggedIn, setLoggedIn] = useState(
+    () => sessionStorage.getItem('app_login_ok') === '1'
+  );
+  const [userInput, setUserInput] = useState('');
+  const [loginPassInput, setLoginPassInput] = useState('');
+  const [loginError, setLoginError] = useState(false);
+  const userInputRef = useRef(null);
+
+  const submitLogin = () => {
+    if (userInput === APP_USER && loginPassInput === APP_PASSWORD) {
+      sessionStorage.setItem('app_login_ok', '1');
+      setLoggedIn(true);
+      setLoginError(false);
+    } else {
+      setLoginError(true);
+      setLoginPassInput('');
+    }
+  };
+
+  const handleLoginKey = (e) => {
+    if (e.key === 'Enter') submitLogin();
+  };
+
+  const logout = () => {
+    sessionStorage.removeItem('app_login_ok');
+    sessionStorage.removeItem('entradas_ok');
+    setLoggedIn(false);
+    setUserInput('');
+    setLoginPassInput('');
+  };
 
   if (publicTicket) {
     return <PublicTicketViewer ticketCode={publicTicket} />;
@@ -172,6 +206,45 @@ export default function App() {
     if (e.key === 'Escape') setEditingName(false);
   };
 
+  if (!loggedIn) {
+    return (
+      <div className="login-screen no-print">
+        <div className="login-card">
+          <div className="login-icon">🔒</div>
+          <div className="login-title">Iniciar sesión</div>
+          <p className="login-sub">Ingresá tus credenciales para continuar</p>
+          <input
+            ref={userInputRef}
+            type="text"
+            className="login-input"
+            placeholder="Usuario"
+            value={userInput}
+            onChange={(e) => { setUserInput(e.target.value); setLoginError(false); }}
+            onKeyDown={handleLoginKey}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+          <input
+            type="password"
+            className="login-input"
+            placeholder="Contraseña"
+            value={loginPassInput}
+            onChange={(e) => { setLoginPassInput(e.target.value); setLoginError(false); }}
+            onKeyDown={handleLoginKey}
+            autoComplete="current-password"
+          />
+          {loginError && (
+            <p className="pass-error">Usuario o contraseña incorrectos.</p>
+          )}
+          <button className="login-btn" onClick={submitLogin}>
+            Ingresar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root no-print">
       {/* ─── Header ─── */}
@@ -223,6 +296,10 @@ export default function App() {
             ))}
 
           </nav>
+
+          <button className="logout-btn" onClick={logout} title="Cerrar sesión">
+            Salir
+          </button>
         </div>
       </header>
 
@@ -264,4 +341,3 @@ export default function App() {
     </div>
   );
 }
-

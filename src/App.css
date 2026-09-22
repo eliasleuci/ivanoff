@@ -1977,3 +1977,84 @@ body {
   transition: all 0.2s;
 }
 .pass-btn:active { filter: brightness(0.92); transform: scale(0.98); }
+
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--color-bg, #14110f);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.2s ease;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--color-card-alt);
+  border: 1px solid #3f3f46;
+  border-radius: 24px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: scaleIn 0.25s ease;
+}
+.login-icon { font-size: 52px; line-height: 1; }
+.login-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: #e4e4e7;
+  text-align: center;
+}
+.login-sub { font-size: 14px; color: #71717a; text-align: center; margin: 0 0 6px; }
+.login-input {
+  width: 100%;
+  background: var(--color-card);
+  border: 1.5px solid #3f3f46;
+  border-radius: 14px;
+  padding: 16px;
+  color: #e4e4e7;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  text-align: center;
+  outline: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 56px;
+}
+.login-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(45, 212, 168, 0.15);
+}
+.login-input::placeholder { color: #3f3f46; }
+.login-btn {
+  width: 100%;
+  padding: 18px;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 16px;
+  color: #14110f;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-height: 60px;
+  transition: all 0.2s;
+}
+.login-btn:active { filter: brightness(0.92); transform: scale(0.98); }
+.logout-btn {
+  background: transparent;
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+  color: #a1a1aa;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.logout-btn:hover { border-color: #f87171; color: #f87171; }
