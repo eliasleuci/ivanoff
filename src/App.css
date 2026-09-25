@@ -1446,6 +1446,28 @@ body {
 .ls-delete-btn:hover {
   background: rgba(239, 68, 68, 0.2);
 }
+.ls-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ls-wa-btn {
+  background: rgba(37, 211, 102, 0.12);
+  color: #25d366;
+  border: none;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.ls-wa-btn:hover {
+  background: rgba(37, 211, 102, 0.22);
+}
 .ls-card-name {
   font-size: 15px;
   font-weight: 700;
@@ -2058,3 +2080,25 @@ body {
   transition: all 0.2s;
 }
 .logout-btn:hover { border-color: #f87171; color: #f87171; }
+
+/* ─── Puerta (entradas pre-impresas) ─── */
+.pt-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pt-note {
+  font-size: 12px;
+  color: #71717a;
+  margin: -4px 0 0;
+}
+.cierre-dl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pt-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}

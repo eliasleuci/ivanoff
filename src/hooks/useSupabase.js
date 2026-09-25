@@ -141,6 +141,25 @@ export async function createEventTicket({ buyerName, ticketType, price, paymentM
   return data;
 }
 
+// Lote de entradas de puerta pre-generadas para imprimir (código PTA-…)
+export async function createDoorTickets({ count, ticketType, price, startNumber }) {
+  const rows = Array.from({ length: count }, (_, i) => ({
+    ticket_code: `PTA-${crypto.randomUUID().toUpperCase()}`,
+    buyer_name: `Puerta #${String(startNumber + i).padStart(3, '0')}`,
+    ticket_type: ticketType,
+    price: Number(price),
+    payment_method: 'efectivo',
+    used: false,
+  }));
+
+  const { data, error } = await supabase
+    .from('event_tickets')
+    .insert(rows)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
 export async function validateTicket(ticketCode) {
   const { data, error } = await supabase.rpc('validate_ticket', {
     p_ticket_code: ticketCode,

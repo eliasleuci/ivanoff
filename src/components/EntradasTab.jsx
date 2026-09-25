@@ -7,6 +7,7 @@ import {
   fetchEventTickets,
   deleteAllEventTickets,
   deleteEventTicket,
+  createDoorTickets,
 } from '../hooks/useSupabase';
 
 
@@ -23,6 +24,11 @@ const fmt = (n) =>
     currency: 'ARS',
     minimumFractionDigits: 0,
   }).format(n);
+
+/* Entradas de puerta: pre-impresas, cuentan como vendidas recién al escanearse */
+const isDoorTicket = (t) => t.ticket_code?.startsWith('PTA-');
+const isSold = (t) => !isDoorTicket(t) || t.used;
+const doorNumber = (t) => parseInt(t.buyer_name?.match(/#(\d+)/)?.[1] ?? '0', 10);
 
 /* ══════════════════════════════════════════════════════════
    MODAL QR — Bottom sheet en mobile, centered en desktop
@@ -662,7 +668,7 @@ function ResultCard({ result, onScanAgain }) {
 /* ══════════════════════════════════════════════════════════
    LISTADO
 ══════════════════════════════════════════════════════════ */
-function ListadoEntradas({ refresh }) {
+function ListadoEntradas({ refresh, onResend }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -672,7 +678,7 @@ function ListadoEntradas({ refresh }) {
     setLoading(true);
     try {
       const data = await fetchEventTickets();
-      setTickets(data);
+      setTickets(data.filter(isSold));
     } catch (err) {
       console.error(err);
     } finally {
@@ -799,13 +805,25 @@ function ListadoEntradas({ refresh }) {
                         {t.used ? '✓ Usada' : '⏳ Pendiente'}
                       </span>
                     </div>
-                    <button 
-                      className="ls-delete-btn" 
-                      onClick={() => handleDelete(t.id)}
-                      title="Eliminar entrada"
-                    >
-                      🗑️
-                    </button>
+                    <div className="ls-card-actions">
+                      <button
+                        className="ls-wa-btn"
+                        onClick={() => onResend(t)}
+                        title="Reenviar por WhatsApp"
+                        aria-label="Reenviar por WhatsApp"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                      </button>
+                      <button 
+                        className="ls-delete-btn" 
+                        onClick={() => handleDelete(t.id)}
+                        title="Eliminar entrada"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                   <div className="ls-card-name">{t.buyer_name || 'Sin nombre'}</div>
                   <div className="ls-card-meta">
@@ -841,12 +859,14 @@ function CierreTab({ eventName, onReset }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [resetDone, setResetDone] = useState(false);
+  const [doorUnsold, setDoorUnsold] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchEventTickets();
-      setTickets(data);
+      setTickets(data.filter(isSold));
+      setDoorUnsold(data.filter((t) => isDoorTicket(t) && !t.used).length);
     } catch (e) {
       console.error(e);
     } finally {
@@ -899,6 +919,7 @@ function CierreTab({ eventName, onReset }) {
       `"Entradas usadas",${used}`,
       `"Entradas pendientes",${pending}`,
       `"Recaudación total",${revenue}`,
+      `"Entradas de puerta sin vender",${doorUnsold}`,
       '',
       `"POR TIPO"`,
       ...byType.map((t) => `"${t.label}",${t.count},${t.revenue}`),
@@ -932,6 +953,7 @@ function CierreTab({ eventName, onReset }) {
       `  Entradas usadas         : ${used}`,
       `  Entradas pendientes     : ${pending}`,
       `  Recaudación total       : ${fmt(revenue)}`,
+      `  Puerta sin vender       : ${doorUnsold}`,
       ``,
       `BREAKDOWN POR TIPO`,
       ...byType.map((t) => `  ${t.label.padEnd(12)}: ${t.count} entradas — ${fmt(t.revenue)} — ${t.used} ingresaron`),
@@ -1024,6 +1046,10 @@ function CierreTab({ eventName, onReset }) {
           <span className="cierre-stat-l">Recaudado</span>
         </div>
       </div>
+
+      {doorUnsold > 0 && (
+        <p className="pt-note">🖨️ {doorUnsold} entradas de puerta impresas sin vender (no suman a la recaudación).</p>
+      )}
 
       {/* By type */}
       <div className="cierre-section">
@@ -1159,12 +1185,296 @@ function CierreTab({ eventName, onReset }) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   PUERTA — lote de entradas pre-impresas
+══════════════════════════════════════════════════════════ */
+function PuertaTab({ eventName }) {
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState('');
+  const [lastBatch, setLastBatch] = useState([]);
+  const [form, setForm] = useState({ count: '150', ticketType: 'General', price: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchEventTickets();
+      setTickets(data.filter(isDoorTicket));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const sold = tickets.filter((t) => t.used);
+  const available = tickets.filter((t) => !t.used);
+  const revenue = sold.reduce((s, t) => s + Number(t.price), 0);
+  const selectedType = TICKET_TYPES.find((t) => t.id === form.ticketType) || TICKET_TYPES[0];
+
+  const handleGenerate = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    const count = parseInt(form.count, 10);
+    const priceNum = parseFloat(form.price);
+    if (isNaN(count) || count < 1 || count > 500) {
+      setError('Ingresá una cantidad entre 1 y 500.');
+      return;
+    }
+    if (isNaN(priceNum) || priceNum < 0) {
+      setError('Ingresá un precio válido (0 o mayor).');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const startNumber = tickets.reduce((m, t) => Math.max(m, doorNumber(t)), 0) + 1;
+      const created = await createDoorTickets({
+        count,
+        ticketType: form.ticketType,
+        price: priceNum,
+        startNumber,
+      });
+      setLastBatch(created);
+      await load();
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Error al generar el lote.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleDelete = async (t) => {
+    if (!window.confirm(`¿Eliminar la entrada ${t.buyer_name}? Si ya está impresa, ese QR deja de funcionar.`)) return;
+    try {
+      await deleteEventTicket(t.id);
+      setLastBatch((prev) => prev.filter((x) => x.id !== t.id));
+      await load();
+    } catch (err) {
+      console.error(err);
+      alert('Error al eliminar la entrada');
+    }
+  };
+
+  const listed = [...tickets]
+    .sort((a, b) => doorNumber(a) - doorNumber(b))
+    .filter((t) => !searchQuery.trim() || String(doorNumber(t)).includes(searchQuery.replace(/\D/g, '')));
+
+  const handleDownload = async (list) => {
+    if (list.length === 0) return;
+    setDownloading(true);
+    try {
+      // Carga diferida: jsPDF solo se baja cuando se usa
+      const { downloadDoorTicketsPdf } = await import('../utils/doorTicketsPdf');
+      await downloadDoorTicketsPdf(list, eventName);
+    } catch (err) {
+      console.error(err);
+      alert('Error al generar el PDF');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="scan-centered">
+        <div className="scan-big-spinner" />
+        <p className="scan-loading-txt">Cargando entradas de puerta…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vender-wrap pt-wrap">
+      {/* Stock */}
+      <div className="ls-stats">
+        <div className="ls-stat">
+          <span className="ls-stat-n">{tickets.length}</span>
+          <span className="ls-stat-l">Impresas</span>
+        </div>
+        <div className="ls-stat ls-stat--used">
+          <span className="ls-stat-n">{sold.length}</span>
+          <span className="ls-stat-l">Escaneadas</span>
+        </div>
+        <div className="ls-stat ls-stat--pen">
+          <span className="ls-stat-n">{available.length}</span>
+          <span className="ls-stat-l">Disponibles</span>
+        </div>
+        <div className="ls-stat ls-stat--rev">
+          <span className="ls-stat-n ls-stat-n--sm">{fmt(revenue)}</span>
+          <span className="ls-stat-l">Recaudado</span>
+        </div>
+      </div>
+      <p className="pt-note">
+        Las entradas impresas cuentan como vendidas recién cuando se escanean en la puerta.
+      </p>
+
+      {/* Descargar PDF */}
+      <div className="cierre-dl-grid">
+        {lastBatch.length > 0 && (
+          <button className="cierre-dl-btn" onClick={() => handleDownload(lastBatch)} disabled={downloading}>
+            <span className="cierre-dl-icon">📥</span>
+            <div>
+              <div className="cierre-dl-name">{downloading ? 'Generando PDF…' : 'PDF del lote nuevo'}</div>
+              <div className="cierre-dl-desc">{lastBatch.length} entradas recién generadas</div>
+            </div>
+          </button>
+        )}
+        <button className="cierre-dl-btn" onClick={() => handleDownload(available)} disabled={downloading || available.length === 0}>
+          <span className="cierre-dl-icon">📄</span>
+          <div>
+            <div className="cierre-dl-name">{downloading ? 'Generando PDF…' : 'PDF de disponibles'}</div>
+            <div className="cierre-dl-desc">{available.length} sin vender · 12 por hoja A4</div>
+          </div>
+        </button>
+      </div>
+
+      {/* Generar lote */}
+      <form className="vender-form" onSubmit={handleGenerate}>
+        <div className="vf-section">
+          <label className="vf-label">Tipo de entrada</label>
+          <div className="vf-type-grid">
+            {TICKET_TYPES.map((t) => {
+              const active = form.ticketType === t.id;
+              return (
+                <button
+                  type="button"
+                  key={t.id}
+                  onClick={() => setForm((p) => ({ ...p, ticketType: t.id }))}
+                  className={`vf-type-card ${active ? 'vf-type-card--active' : ''}`}
+                  style={active ? { borderColor: t.color, background: t.bg, color: t.color } : {}}
+                >
+                  <span className="vf-type-emoji">{t.emoji}</span>
+                  <span className="vf-type-label">{t.label}</span>
+                  {active && <span className="vf-type-check">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="vf-section">
+          <label className="vf-label">Cantidad</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            className="vf-input"
+            min="1"
+            max="500"
+            value={form.count}
+            onChange={(e) => setForm((p) => ({ ...p, count: e.target.value }))}
+            required
+          />
+        </div>
+
+        <div className="vf-section">
+          <label className="vf-label">Precio</label>
+          <div className="vf-price-wrap">
+            <span className="vf-price-symbol">$</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="vf-input vf-price-input"
+              placeholder="0"
+              min="0"
+              value={form.price}
+              onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
+              required
+            />
+          </div>
+        </div>
+
+        {error && <div className="vf-error">{error}</div>}
+
+        <button
+          type="submit"
+          className="vf-submit"
+          disabled={generating}
+          style={{ background: selectedType.color }}
+        >
+          {generating ? <span className="vf-spinner" /> : `Generar lote de ${form.count || 0} entradas`}
+        </button>
+      </form>
+
+      {/* Listado de entradas de puerta */}
+      {tickets.length > 0 && (
+        <div className="pt-list-wrap">
+          <div className="vf-label">Entradas de puerta ({tickets.length})</div>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="ls-search-bar"
+            placeholder="🔍 Buscar por número..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="ls-list">
+            {listed.map((t) => {
+              const ti = TICKET_TYPES.find((x) => x.id === t.ticket_type) || TICKET_TYPES[0];
+              return (
+                <div key={t.id} className={`ls-card ${t.used ? 'ls-card--used' : ''}`}>
+                  <div
+                    className="ls-card-stripe"
+                    style={{ background: t.used ? '#3f3f46' : ti.color }}
+                  />
+                  <div className="ls-card-body">
+                    <div className="ls-card-top">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span
+                          className="ls-type-chip"
+                          style={{ background: ti.bg, color: ti.color }}
+                        >
+                          {ti.emoji} {t.ticket_type}
+                        </span>
+                        <span className={`ls-status ${t.used ? 'ls-status--used' : 'ls-status--pen'}`}>
+                          {t.used ? '✓ Escaneada' : '🖨️ Disponible'}
+                        </span>
+                      </div>
+                      <button
+                        className="ls-delete-btn"
+                        onClick={() => handleDelete(t)}
+                        title="Eliminar entrada"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <div className="ls-card-name">#{String(doorNumber(t)).padStart(3, '0')}</div>
+                    <div className="ls-card-meta">
+                      <span>{fmt(t.price)}</span>
+                      {t.used && t.used_at && (
+                        <span className="ls-used-time">
+                          Ingresó: {new Date(t.used_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {listed.length === 0 && (
+              <div className="ls-empty"><p>No hay entradas con ese número.</p></div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    ROOT — ENTRADAS TAB
 ══════════════════════════════════════════════════════════ */
 const SUB_TABS = [
   { id: 'vender', label: 'Vender', icon: '🎟️' },
   { id: 'escanear', label: 'Escanear', icon: '📷' },
   { id: 'listado', label: 'Listado', icon: '📋' },
+  { id: 'puerta', label: 'Puerta', icon: '🖨️' },
   { id: 'cierre', label: 'Cierre', icon: '🌙' },
 ];
 
@@ -1205,7 +1515,8 @@ export default function EntradasTab({ eventName }) {
           <VenderEntrada eventName={eventName} onGenerated={handleGenerated} />
         )}
         {subTab === 'escanear' && <EscanearEntrada />}
-        {subTab === 'listado' && <ListadoEntradas refresh={listRefresh} />}
+        {subTab === 'listado' && <ListadoEntradas refresh={listRefresh} onResend={setQrTicket} />}
+        {subTab === 'puerta' && <PuertaTab eventName={eventName} />}
         {subTab === 'cierre' && <CierreTab eventName={eventName} onReset={handleReset} />}
 
       </div>
