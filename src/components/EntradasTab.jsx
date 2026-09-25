@@ -1317,7 +1317,8 @@ function PuertaTab({ eventName }) {
 
       {/* Descargar PDF */}
       <div className="cierre-dl-grid">
-        {lastBatch.length > 0 && (
+        {/* Solo si hay otras disponibles además del lote nuevo; si no, sería el mismo PDF */}
+        {lastBatch.length > 0 && available.length > lastBatch.length && (
           <button className="cierre-dl-btn" onClick={() => handleDownload(lastBatch)} disabled={downloading}>
             <span className="cierre-dl-icon">📥</span>
             <div>
