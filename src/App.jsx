@@ -74,7 +74,7 @@ function PublicTicketViewer({ ticketCode }) {
 
 const ENTRADAS_PASSWORD = 'adm2026';
 const APP_USER = 'controldegestion';
-const APP_PASSWORD = 'administrador2026';
+const APP_PASSWORD = 'Topo2026';
 
 
 
