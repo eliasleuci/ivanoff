@@ -40,10 +40,16 @@ function RoleShell({ profile, eventName, onLogout, children }) {
   );
 }
 
+// Se vuelve a leer al volver a la app, para tomar cambios del admin (alias, escáner, nombre del evento)
 function useEventConfig() {
   const [config, setConfig] = useState(null);
   useEffect(() => {
     fetchEventConfig().then(setConfig).catch(console.error);
+    // Si falla al volver (sin señal, o el admin lo pausó) se mantiene la config que ya tenía
+    const onVisible = () =>
+      document.visibilityState === 'visible' && fetchEventConfig().then(setConfig).catch(() => {});
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
   return config;
 }

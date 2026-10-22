@@ -8,6 +8,7 @@ import {
   deleteAllEventTickets,
   deleteEventTicket,
   createDoorTickets,
+  fetchEventConfig,
 } from '../hooks/useSupabase';
 import {
   TICKET_TYPES,
@@ -25,6 +26,14 @@ import { ensureBarcodeDetector } from '../utils/qrDetector';
 ══════════════════════════════════════════════════════════ */
 export function QRModal({ ticket, eventName, paymentAlias, onClose }) {
   const canvasRef = useRef(null);
+  // El alias se lee al abrir el modal: la pantalla pudo quedar abierta desde antes de que el admin lo cargara
+  const [alias, setAlias] = useState(paymentAlias || null);
+
+  useEffect(() => {
+    fetchEventConfig()
+      .then((c) => setAlias(c.payment_alias || null))
+      .catch(console.error);
+  }, []);
   const [phone, setPhone] = useState(() => (ticket.buyer_phone || '').replace(/\D/g, ''));
   const [copied, setCopied] = useState(false);
   const [qrReady, setQrReady] = useState(false);
@@ -68,8 +77,8 @@ export function QRModal({ ticket, eventName, paymentAlias, onClose }) {
       `🏷️ Tipo: ${ticket.ticket_type}`,
       `💰 Precio: ${fmt(ticket.price)}`,
       `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 📲'}`,
-      ...(ticket.payment_method === 'transferencia' && paymentAlias
-        ? [`🏦 Alias: *${paymentAlias}*`]
+      ...(ticket.payment_method === 'transferencia' && alias
+        ? [`🏦 Alias: *${alias}*`]
         : []),
       ``,
       `📍 *Link de tu entrada (código QR):*`,
@@ -159,6 +168,12 @@ export function QRModal({ ticket, eventName, paymentAlias, onClose }) {
                 {ticket.payment_method === 'efectivo' ? '💵 Efectivo' : '📲 Transferencia'}
               </span>
             </div>
+            {ticket.payment_method === 'transferencia' && alias && (
+              <div className="qrm-info-row">
+                <span className="qrm-info-key">Alias</span>
+                <span className="qrm-info-val">{alias}</span>
+              </div>
+            )}
             <button className="qrm-code-row" onClick={copyCode}>
               <span className="qrm-info-key">Código</span>
               <span className="qrm-code-val">
