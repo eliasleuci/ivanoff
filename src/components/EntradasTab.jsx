@@ -2,40 +2,30 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'qrcode';
 import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import {
-  createEventTicket,
+  sellTicket,
   validateTicket,
   fetchEventTickets,
   deleteAllEventTickets,
   deleteEventTicket,
   createDoorTickets,
 } from '../hooks/useSupabase';
-
-
-/* ─── Tipos de entrada ─── */
-const TICKET_TYPES = [
-  { id: 'General', label: 'General', emoji: '🎟️', color: '#2dd4a8', bg: 'rgba(45,212,168,0.12)' },
-  { id: 'VIP', label: 'VIP', emoji: '⭐', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-  { id: 'Combo', label: 'Combo', emoji: '🎁', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
-];
-
-const fmt = (n) =>
-  new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 0,
-  }).format(n);
-
-/* Entradas de puerta: pre-impresas, cuentan como vendidas recién al escanearse */
-const isDoorTicket = (t) => t.ticket_code?.startsWith('PTA-');
-const isSold = (t) => !isDoorTicket(t) || t.used;
-const doorNumber = (t) => parseInt(t.buyer_name?.match(/#(\d+)/)?.[1] ?? '0', 10);
+import {
+  TICKET_TYPES,
+  fmt,
+  isDoorTicket,
+  isSold,
+  doorNumber,
+  sellerName,
+  groupBySeller,
+} from '../utils/tickets';
+import { ensureBarcodeDetector } from '../utils/qrDetector';
 
 /* ══════════════════════════════════════════════════════════
    MODAL QR — Bottom sheet en mobile, centered en desktop
 ══════════════════════════════════════════════════════════ */
-function QRModal({ ticket, eventName, onClose }) {
+export function QRModal({ ticket, eventName, paymentAlias, onClose }) {
   const canvasRef = useRef(null);
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(() => (ticket.buyer_phone || '').replace(/\D/g, ''));
   const [copied, setCopied] = useState(false);
   const [qrReady, setQrReady] = useState(false);
   const [canShareFiles, setCanShareFiles] = useState(false);
@@ -78,6 +68,9 @@ function QRModal({ ticket, eventName, onClose }) {
       `🏷️ Tipo: ${ticket.ticket_type}`,
       `💰 Precio: ${fmt(ticket.price)}`,
       `💳 Pago: ${ticket.payment_method === 'efectivo' ? 'Efectivo 💵' : 'Transferencia 📲'}`,
+      ...(ticket.payment_method === 'transferencia' && paymentAlias
+        ? [`🏦 Alias: *${paymentAlias}*`]
+        : []),
       ``,
       `📍 *Link de tu entrada (código QR):*`,
       ticketUrl,
@@ -237,17 +230,26 @@ function QRModal({ ticket, eventName, onClose }) {
 /* ══════════════════════════════════════════════════════════
    VENDER ENTRADA
 ══════════════════════════════════════════════════════════ */
-function VenderEntrada({ eventName, onGenerated }) {
+// Lo usan el admin y los RRPP: la entrada queda a nombre de quien la genera
+export function VenderEntrada({ config, onGenerated }) {
   const [form, setForm] = useState({
     buyerName: '',
+    buyerPhone: '',
     ticketType: 'General',
     price: '',
     paymentMethod: 'efectivo',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [aliasCopied, setAliasCopied] = useState(false);
 
   const selectedType = TICKET_TYPES.find((t) => t.id === form.ticketType) || TICKET_TYPES[0];
+
+  const copyAlias = () => {
+    navigator.clipboard?.writeText(config.payment_alias);
+    setAliasCopied(true);
+    setTimeout(() => setAliasCopied(false), 2000);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -261,14 +263,15 @@ function VenderEntrada({ eventName, onGenerated }) {
 
     setLoading(true);
     try {
-      const ticket = await createEventTicket({
+      const ticket = await sellTicket({
         buyerName: form.buyerName.trim() || 'Sin nombre',
+        buyerPhone: form.buyerPhone.trim(),
         ticketType: form.ticketType,
         price: priceNum,
         paymentMethod: form.paymentMethod,
       });
       // Reset form
-      setForm((prev) => ({ ...prev, buyerName: '', price: '' }));
+      setForm((prev) => ({ ...prev, buyerName: '', buyerPhone: '', price: '' }));
       onGenerated(ticket);
     } catch (err) {
       console.error(err);
@@ -318,6 +321,22 @@ function VenderEntrada({ eventName, onGenerated }) {
           />
         </div>
 
+        {/* Buyer phone */}
+        <div className="vf-section">
+          <label className="vf-label">
+            WhatsApp del comprador <span className="vf-optional">(opcional)</span>
+          </label>
+          <input
+            type="tel"
+            inputMode="numeric"
+            className="vf-input"
+            placeholder="549xxxxxxxxxx"
+            value={form.buyerPhone}
+            onChange={(e) => setForm((p) => ({ ...p, buyerPhone: e.target.value }))}
+            maxLength={20}
+          />
+        </div>
+
         {/* Price */}
         <div className="vf-section">
           <label className="vf-label">Precio</label>
@@ -357,6 +376,13 @@ function VenderEntrada({ eventName, onGenerated }) {
               <span>Transferencia</span>
             </button>
           </div>
+          {form.paymentMethod === 'transferencia' && config?.payment_alias && (
+            <button type="button" className="vf-alias" onClick={copyAlias}>
+              <span className="vf-alias-key">Alias para transferir</span>
+              <span className="vf-alias-val">{config.payment_alias}</span>
+              <span className="vf-alias-copy">{aliasCopied ? '✓ Copiado' : '⎘ Copiar'}</span>
+            </button>
+          )}
         </div>
 
         {error && <div className="vf-error">{error}</div>}
@@ -382,7 +408,7 @@ function VenderEntrada({ eventName, onGenerated }) {
 /* ══════════════════════════════════════════════════════════
    ESCANEAR / VALIDAR
 ══════════════════════════════════════════════════════════ */
-function EscanearEntrada() {
+export function EscanearEntrada() {
   const [cameraActive, setCameraActive] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -436,7 +462,8 @@ function EscanearEntrada() {
     isProcessingRef.current = false;
 
     // Pequeña espera para asegurar que el div #qr-reader-el esté montado
-    await new Promise((r) => setTimeout(r, 200));
+    // (y que el lector de QR mejorado esté listo antes de crear el escáner)
+    await Promise.all([new Promise((r) => setTimeout(r, 200)), ensureBarcodeDetector()]);
 
     const container = document.getElementById('qr-reader-el');
     if (!container) {
@@ -522,6 +549,9 @@ function EscanearEntrada() {
       startScanner();
     }
   };
+
+  // Precargar el lector de QR mientras el usuario todavía no activó la cámara
+  useEffect(() => { ensureBarcodeDetector(); }, []);
 
   useEffect(() => {
     const handleUnload = () => {
@@ -633,20 +663,27 @@ function ResultCard({ result, onScanAgain }) {
 
   const isValid = result.status === 'valid';
   const isUsed = result.status === 'already_used';
+  const title = {
+    valid: 'ENTRADA VÁLIDA',
+    already_used: 'YA UTILIZADA',
+    not_found: 'NO RECONOCIDA',
+    not_allowed: 'SIN PERMISO',
+  }[result.status] || 'ERROR';
 
   return (
     <div className={`scan-result-card ${isValid ? 'src-valid' : isUsed ? 'src-used' : 'src-unknown'}`}>
       <div className="src-icon">
-        {isValid ? '✅' : isUsed ? '🚫' : '⚠️'}
+        {isValid ? '✅' : isUsed ? '🚫' : result.status === 'not_allowed' ? '🔒' : '⚠️'}
       </div>
-      <div className="src-title">
-        {isValid ? 'ENTRADA VÁLIDA' : isUsed ? 'YA UTILIZADA' : result.status === 'not_found' ? 'NO RECONOCIDA' : 'ERROR'}
-      </div>
+      <div className="src-title">{title}</div>
       {result.buyer_name && (
         <div className="src-buyer">{result.buyer_name}</div>
       )}
       {result.ticket_type && (
         <div className="src-type">{result.ticket_type}</div>
+      )}
+      {result.seller_name && (
+        <div className="src-meta">Vendida por {result.seller_name}</div>
       )}
       {result.used_at && (
         <div className="src-meta">
@@ -668,7 +705,8 @@ function ResultCard({ result, onScanAgain }) {
 /* ══════════════════════════════════════════════════════════
    LISTADO
 ══════════════════════════════════════════════════════════ */
-function ListadoEntradas({ refresh, onResend }) {
+// El RRPP usa este mismo listado para "Mis entradas" (sin borrar ni ver vendedor)
+export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -709,7 +747,8 @@ function ListadoEntradas({ refresh, onResend }) {
       const q = searchQuery.toLowerCase();
       const name = t.buyer_name ? t.buyer_name.toLowerCase() : '';
       const code = t.ticket_code ? t.ticket_code.toLowerCase() : '';
-      if (!name.includes(q) && !code.includes(q)) return false;
+      const seller = isAdmin ? sellerName(t).toLowerCase() : '';
+      if (!name.includes(q) && !code.includes(q) && !seller.includes(q)) return false;
     }
     return true;
   });
@@ -754,7 +793,7 @@ function ListadoEntradas({ refresh, onResend }) {
         <input
           type="text"
           className="ls-search-bar"
-          placeholder="🔍 Buscar por nombre o código..."
+          placeholder={isAdmin ? '🔍 Buscar por nombre, código o vendedor...' : '🔍 Buscar por nombre o código...'}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -816,18 +855,21 @@ function ListadoEntradas({ refresh, onResend }) {
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                         </svg>
                       </button>
-                      <button 
-                        className="ls-delete-btn" 
-                        onClick={() => handleDelete(t.id)}
-                        title="Eliminar entrada"
-                      >
-                        🗑️
-                      </button>
+                      {isAdmin && (
+                        <button
+                          className="ls-delete-btn"
+                          onClick={() => handleDelete(t.id)}
+                          title="Anular entrada"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="ls-card-name">{t.buyer_name || 'Sin nombre'}</div>
                   <div className="ls-card-meta">
                     <span>{t.payment_method === 'efectivo' ? '💵' : '📲'} {fmt(t.price)}</span>
+                    {isAdmin && <span className="ls-card-seller">👤 {sellerName(t)}</span>}
                     <span className="ls-card-date">
                       {new Date(t.created_at).toLocaleString('es-AR', {
                         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
@@ -891,6 +933,7 @@ function CierreTab({ eventName, onReset }) {
     { id: 'efectivo', label: '💵 Efectivo', count: tickets.filter((t) => t.payment_method === 'efectivo').length, revenue: tickets.filter((t) => t.payment_method === 'efectivo').reduce((s, t) => s + Number(t.price), 0) },
     { id: 'transferencia', label: '💳 Transferencia', count: tickets.filter((t) => t.payment_method === 'transferencia').length, revenue: tickets.filter((t) => t.payment_method === 'transferencia').reduce((s, t) => s + Number(t.price), 0) },
   ];
+  const bySeller = groupBySeller(tickets);
 
   /* ─ Descargar CSV ─ */
   const downloadCSV = () => {
@@ -898,13 +941,14 @@ function CierreTab({ eventName, onReset }) {
     const dateStr = now.toLocaleDateString('es-AR').replace(/\//g, '-');
     const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }).replace(':', '');
 
-    const header = ['#', 'Nombre', 'Tipo', 'Precio', 'Pago', 'Estado', 'Creada', 'Escaneada'].join(',');
+    const header = ['#', 'Nombre', 'Tipo', 'Precio', 'Pago', 'Vendedor', 'Estado', 'Creada', 'Escaneada'].join(',');
     const rows = tickets.map((t, i) => [
       i + 1,
       `"${t.buyer_name || 'Sin nombre'}"`,
       t.ticket_type,
       t.price,
       t.payment_method,
+      `"${sellerName(t)}"`,
       t.used ? 'Usada' : 'Pendiente',
       `"${new Date(t.created_at).toLocaleString('es-AR')}"`,
       t.used_at ? `"${new Date(t.used_at).toLocaleString('es-AR')}"` : '-',
@@ -926,6 +970,9 @@ function CierreTab({ eventName, onReset }) {
       '',
       `"POR PAGO"`,
       ...byPayment.map((p) => `"${p.label}",${p.count},${p.revenue}`),
+      '',
+      `"POR VENDEDOR","Entradas","Ingresaron","Recaudado"`,
+      ...bySeller.map((s) => `"${s.name}",${s.count},${s.used},${s.revenue}`),
     ];
 
     const csv = [header, ...rows, ...summary].join('\n');
@@ -960,6 +1007,9 @@ function CierreTab({ eventName, onReset }) {
       ``,
       `BREAKDOWN POR MÉTODO DE PAGO`,
       ...byPayment.map((p) => `  ${p.label.padEnd(18)}: ${p.count} entradas — ${fmt(p.revenue)}`),
+      ``,
+      `POR VENDEDOR`,
+      ...bySeller.map((s) => `  ${s.name.padEnd(18)}: ${s.count} entradas — ${s.used} ingresaron — ${fmt(s.revenue)}`),
       ``,
       `════════════════════════════════════════`,
       `DETALLE DE ENTRADAS`,
@@ -1479,7 +1529,7 @@ const SUB_TABS = [
   { id: 'cierre', label: 'Cierre', icon: '🌙' },
 ];
 
-export default function EntradasTab({ eventName }) {
+export default function EntradasTab({ eventName, config }) {
   const [subTab, setSubTab] = useState('vender');
   const [qrTicket, setQrTicket] = useState(null);
   const [listRefresh, setListRefresh] = useState(0);
@@ -1513,7 +1563,7 @@ export default function EntradasTab({ eventName }) {
       {/* Content */}
       <div className="et-content">
         {subTab === 'vender' && (
-          <VenderEntrada eventName={eventName} onGenerated={handleGenerated} />
+          <VenderEntrada config={config} onGenerated={handleGenerated} />
         )}
         {subTab === 'escanear' && <EscanearEntrada />}
         {subTab === 'listado' && <ListadoEntradas refresh={listRefresh} onResend={setQrTicket} />}
@@ -1527,6 +1577,7 @@ export default function EntradasTab({ eventName }) {
         <QRModal
           ticket={qrTicket}
           eventName={eventName}
+          paymentAlias={config?.payment_alias}
           onClose={() => setQrTicket(null)}
         />
       )}

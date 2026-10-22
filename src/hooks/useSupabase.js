@@ -1,5 +1,112 @@
 import { supabase } from '../supabaseClient';
 
+/* ───────────────── AUTH ───────────────── */
+
+// Supabase Auth pide email: el usuario "juan" se guarda como juan@pdv.local.
+// Debe coincidir con EMAIL_DOMAIN en netlify/functions/admin-users.mjs
+export const USERNAME_EMAIL_DOMAIN = 'pdv.local';
+
+// Acepta "juan" o el email completo "juan@pdv.local"
+const usernameToEmail = (username) => {
+  const u = username.trim().toLowerCase();
+  return u.includes('@') ? u : `${u}@${USERNAME_EMAIL_DOMAIN}`;
+};
+
+export async function signIn(username, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: usernameToEmail(username),
+    password,
+  });
+  if (error) throw error;
+  return data.session;
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+// Cambio de clave del propio usuario. Si se pasa la clave actual, se verifica antes.
+export async function changeMyPassword(newPassword, currentPassword = null) {
+  if (currentPassword !== null) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: checkErr } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (checkErr) throw new Error('La clave actual no es correcta.');
+  }
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) {
+    if (/different from the old/i.test(error.message)) {
+      throw new Error('La clave nueva tiene que ser distinta a la actual.');
+    }
+    throw error;
+  }
+  const { error: markErr } = await supabase.rpc('mark_password_changed');
+  if (markErr) throw markErr;
+}
+
+export async function fetchMyProfile(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ───────────────── EQUIPO (RRPP / PUERTA) ───────────────── */
+
+export async function fetchProfiles() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('display_name', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+// Altas y claves pasan por la Netlify Function, que tiene la service role key
+async function callAdminUsers(action, payload) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/.netlify/functions/admin-users', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+  return body;
+}
+
+export async function createTeamUser({ username, displayName, password, role }) {
+  const { profile } = await callAdminUsers('create', { username, displayName, password, role });
+  return profile;
+}
+
+export async function resetTeamPassword(userId, password) {
+  await callAdminUsers('reset_password', { userId, password });
+}
+
+export async function setTeamUserActive(userId, active) {
+  const { profile } = await callAdminUsers('set_active', { userId, active });
+  return profile;
+}
+
+export async function updateTeamUser(userId, { displayName, username }) {
+  const { profile } = await callAdminUsers('update', { userId, displayName, username });
+  return profile;
+}
+
+export async function deleteTeamUser(userId) {
+  await callAdminUsers('delete', { userId });
+}
+
 /* ───────────────── PRODUCTS ───────────────── */
 
 export async function fetchProducts() {
@@ -78,6 +185,18 @@ export async function updateEventName(name) {
   if (error) throw error;
 }
 
+// Alias de cobro y escáner exclusivo
+export async function updateEventSettings(fields) {
+  const { data, error } = await supabase
+    .from('event_config')
+    .update(fields)
+    .eq('id', 1)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /* ───────────────── RESET DAY ───────────────── */
 
 export async function resetDaySales() {
@@ -120,23 +239,15 @@ export async function resetDaySales() {
 
 /* ───────────────── EVENT TICKETS ───────────────── */
 
-export async function createEventTicket({ buyerName, ticketType, price, paymentMethod }) {
-  // Generar un código único para el QR usando crypto
-  const raw = crypto.randomUUID();
-  const ticketCode = `EVT-${raw.toUpperCase()}`;
-
-  const { data, error } = await supabase
-    .from('event_tickets')
-    .insert([{
-      ticket_code: ticketCode,
-      buyer_name: buyerName || null,
-      ticket_type: ticketType,
-      price: Number(price),
-      payment_method: paymentMethod,
-      used: false,
-    }])
-    .select()
-    .single();
+// La entrada queda a nombre de quien la vende (admin o RRPP)
+export async function sellTicket({ buyerName, buyerPhone, ticketType, paymentMethod, price }) {
+  const { data, error } = await supabase.rpc('sell_ticket', {
+    p_buyer_name: buyerName,
+    p_buyer_phone: buyerPhone,
+    p_ticket_type: ticketType,
+    p_payment_method: paymentMethod,
+    p_price: price,
+  });
   if (error) throw error;
   return data;
 }
@@ -171,7 +282,7 @@ export async function validateTicket(ticketCode) {
 export async function fetchEventTickets() {
   const { data, error } = await supabase
     .from('event_tickets')
-    .select('*')
+    .select('*, seller:profiles(display_name, username)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;

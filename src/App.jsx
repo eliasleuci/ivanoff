@@ -3,7 +3,17 @@ import VenderTab from './components/VenderTab';
 import ProductosTab from './components/ProductosTab';
 import ReportesTab from './components/ReportesTab';
 import EntradasTab from './components/EntradasTab';
-import { fetchEventConfig, updateEventName } from './hooks/useSupabase';
+import EquipoTab from './components/EquipoTab';
+import { RrppApp, PuertaApp } from './components/RoleViews';
+import ChangePassword from './components/ChangePassword';
+import { supabase } from './supabaseClient';
+import {
+  fetchEventConfig,
+  updateEventName,
+  signIn,
+  signOut,
+  fetchMyProfile,
+} from './hooks/useSupabase';
 import QRCode from 'qrcode';
 import './App.css';
 
@@ -71,46 +81,134 @@ function PublicTicketViewer({ ticketCode }) {
   );
 }
 
-
+// Clave extra para Entradas/RRPP dentro de la cuenta admin (por si el bar usa la misma sesión)
 const ENTRADAS_PASSWORD = 'adm2026';
-const APP_USER = 'controldegestion';
-const APP_PASSWORD = 'Topo2026';
-
-
+const LOCKED_TABS = ['entradas', 'equipo'];
 
 const TABS = [
   { id: 'vender', label: 'Vender', icon: '💳' },
   { id: 'productos', label: 'Productos', icon: '📦' },
   { id: 'entradas', label: 'Entradas', icon: '🏟️' },
+  { id: 'equipo', label: 'RRPP', icon: '👥' },
   { id: 'reportes', label: 'Reportes', icon: '📊' },
 ];
 
 
 export default function App() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const publicTicket = urlParams.get('ticket');
+  const publicTicket = new URLSearchParams(window.location.search).get('ticket');
+  if (publicTicket) {
+    return <PublicTicketViewer ticketCode={publicTicket} />;
+  }
+  return <AuthGate />;
+}
 
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('pos_active_tab') || 'vender';
-  });
+/* ─── Sesión de Supabase Auth + perfil con rol ─── */
+function AuthGate() {
+  const [session, setSession] = useState(undefined); // undefined = todavía cargando
+  const [profile, setProfile] = useState(null);
+  const [profileError, setProfileError] = useState('');
+  const userId = session?.user?.id;
 
-  // Login general de la app
-  const [loggedIn, setLoggedIn] = useState(
-    () => sessionStorage.getItem('app_login_ok') === '1'
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setProfile(null);
+    setProfileError('');
+    if (!userId) return;
+
+    let cancelled = false;
+    const check = (isRecheck) =>
+      fetchMyProfile(userId)
+        .then((p) => {
+          if (cancelled) return;
+          if (!p) setProfileError('Tu usuario no existe más. Hablá con el administrador.');
+          else if (!p.active) setProfileError('Tu usuario está pausado. Hablá con el administrador.');
+          else setProfile(p);
+        })
+        // Un corte de red al volver a la app no debe sacar al usuario
+        .catch((err) => !cancelled && !isRecheck && setProfileError(err.message));
+
+    check(false);
+
+    // Al volver a la app se revisa si el admin lo pausó o eliminó
+    const onVisible = () => document.visibilityState === 'visible' && check(true);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [userId]);
+
+  const logout = async () => {
+    sessionStorage.removeItem('entradas_ok');
+    try {
+      await signOut();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (session === undefined) return <FullScreenMessage icon="⏳" text="Cargando…" />;
+  if (!session) return <LoginScreen />;
+  if (profileError) {
+    return <FullScreenMessage icon="🚫" text={profileError} onLogout={logout} />;
+  }
+  if (!profile) return <FullScreenMessage icon="⏳" text="Cargando…" />;
+
+  if (profile.must_change_password) {
+    return (
+      <ChangePassword
+        forced
+        onDone={() => setProfile((p) => ({ ...p, must_change_password: false }))}
+        onLogout={logout}
+      />
+    );
+  }
+
+  if (profile.role === 'rrpp') return <RrppApp profile={profile} onLogout={logout} />;
+  if (profile.role === 'puerta') return <PuertaApp profile={profile} onLogout={logout} />;
+  return <AdminApp profile={profile} onLogout={logout} />;
+}
+
+function FullScreenMessage({ icon, text, onLogout }) {
+  return (
+    <div className="login-screen no-print">
+      <div className="login-card">
+        <div className="login-icon">{icon}</div>
+        <p className="login-sub">{text}</p>
+        {onLogout && (
+          <button className="login-btn" onClick={onLogout}>
+            Volver al inicio
+          </button>
+        )}
+      </div>
+    </div>
   );
-  const [userInput, setUserInput] = useState('');
-  const [loginPassInput, setLoginPassInput] = useState('');
-  const [loginError, setLoginError] = useState(false);
-  const userInputRef = useRef(null);
+}
 
-  const submitLogin = () => {
-    if (userInput === APP_USER && loginPassInput === APP_PASSWORD) {
-      sessionStorage.setItem('app_login_ok', '1');
-      setLoggedIn(true);
-      setLoginError(false);
-    } else {
-      setLoginError(true);
-      setLoginPassInput('');
+function LoginScreen() {
+  const [userInput, setUserInput] = useState('');
+  const [passInput, setPassInput] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submitLogin = async () => {
+    if (!userInput.trim() || !passInput) return;
+    setLoading(true);
+    setError('');
+    try {
+      await signIn(userInput, passInput);
+    } catch (err) {
+      if (/banned/i.test(err.message)) setError('Tu usuario está desactivado.');
+      else if (/not confirmed/i.test(err.message)) setError('El usuario no está confirmado en Supabase.');
+      else if (/invalid login/i.test(err.message)) setError('Usuario o contraseña incorrectos.');
+      else setError(`No se pudo ingresar: ${err.message}`);
+      setPassInput('');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -118,33 +216,67 @@ export default function App() {
     if (e.key === 'Enter') submitLogin();
   };
 
-  const logout = () => {
-    sessionStorage.removeItem('app_login_ok');
-    sessionStorage.removeItem('entradas_ok');
-    setLoggedIn(false);
-    setUserInput('');
-    setLoginPassInput('');
-  };
+  return (
+    <div className="login-screen no-print">
+      <div className="login-card">
+        <div className="login-icon">🔒</div>
+        <div className="login-title">Iniciar sesión</div>
+        <p className="login-sub">Ingresá tus credenciales para continuar</p>
+        <input
+          type="text"
+          className="login-input"
+          placeholder="Usuario"
+          value={userInput}
+          onChange={(e) => { setUserInput(e.target.value); setError(''); }}
+          onKeyDown={handleLoginKey}
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <input
+          type="password"
+          className="login-input"
+          placeholder="Contraseña"
+          value={passInput}
+          onChange={(e) => { setPassInput(e.target.value); setError(''); }}
+          onKeyDown={handleLoginKey}
+          autoComplete="current-password"
+        />
+        {error && <p className="pass-error">{error}</p>}
+        <button className="login-btn" onClick={submitLogin} disabled={loading}>
+          {loading ? 'Ingresando…' : 'Ingresar'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-  if (publicTicket) {
-    return <PublicTicketViewer ticketCode={publicTicket} />;
-  }
+function AdminApp({ profile, onLogout }) {
+  // Contraseña para Entradas / RRPP
+  const [entradasUnlocked, setEntradasUnlocked] = useState(
+    () => sessionStorage.getItem('entradas_ok') === '1'
+  );
+
+  // Si se recarga parado en una pestaña bloqueada, volver a Vender
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem('pos_active_tab') || 'vender';
+    return LOCKED_TABS.includes(saved) && !entradasUnlocked ? 'vender' : saved;
+  });
 
   useEffect(() => {
     localStorage.setItem('pos_active_tab', activeTab);
   }, [activeTab]);
 
-  // Contraseña para Entradas
-  const [entradasUnlocked, setEntradasUnlocked] = useState(
-    () => sessionStorage.getItem('entradas_ok') === '1'
-  );
+  const [showChangePass, setShowChangePass] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
+  const [pendingTab, setPendingTab] = useState(null);
   const [passInput, setPassInput] = useState('');
   const [passError, setPassError] = useState(false);
   const passInputRef = useRef(null);
 
   const handleTabClick = (tabId) => {
-    if (tabId === 'entradas' && !entradasUnlocked) {
+    if (LOCKED_TABS.includes(tabId) && !entradasUnlocked) {
+      setPendingTab(tabId);
       setShowPassModal(true);
       setPassInput('');
       setPassError(false);
@@ -159,7 +291,7 @@ export default function App() {
       sessionStorage.setItem('entradas_ok', '1');
       setEntradasUnlocked(true);
       setShowPassModal(false);
-      setActiveTab('entradas');
+      setActiveTab(pendingTab || 'entradas');
     } else {
       setPassError(true);
       setPassInput('');
@@ -172,17 +304,14 @@ export default function App() {
     if (e.key === 'Escape') setShowPassModal(false);
   };
 
-  const [eventName, setEventName] = useState('');
+  const [config, setConfig] = useState(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const nameRef = useRef(null);
+  const eventName = config?.event_name || '';
 
   useEffect(() => {
-    fetchEventConfig()
-      .then((config) => {
-        setEventName(config.event_name || '');
-      })
-      .catch(console.error);
+    fetchEventConfig().then(setConfig).catch(console.error);
   }, []);
 
   const startEditName = () => {
@@ -194,7 +323,7 @@ export default function App() {
   const saveName = async () => {
     try {
       await updateEventName(nameInput);
-      setEventName(nameInput);
+      setConfig((c) => ({ ...c, event_name: nameInput }));
     } catch (err) {
       console.error(err);
     }
@@ -205,45 +334,6 @@ export default function App() {
     if (e.key === 'Enter') saveName();
     if (e.key === 'Escape') setEditingName(false);
   };
-
-  if (!loggedIn) {
-    return (
-      <div className="login-screen no-print">
-        <div className="login-card">
-          <div className="login-icon">🔒</div>
-          <div className="login-title">Iniciar sesión</div>
-          <p className="login-sub">Ingresá tus credenciales para continuar</p>
-          <input
-            ref={userInputRef}
-            type="text"
-            className="login-input"
-            placeholder="Usuario"
-            value={userInput}
-            onChange={(e) => { setUserInput(e.target.value); setLoginError(false); }}
-            onKeyDown={handleLoginKey}
-            autoComplete="username"
-            autoCapitalize="none"
-            autoCorrect="off"
-          />
-          <input
-            type="password"
-            className="login-input"
-            placeholder="Contraseña"
-            value={loginPassInput}
-            onChange={(e) => { setLoginPassInput(e.target.value); setLoginError(false); }}
-            onKeyDown={handleLoginKey}
-            autoComplete="current-password"
-          />
-          {loginError && (
-            <p className="pass-error">Usuario o contraseña incorrectos.</p>
-          )}
-          <button className="login-btn" onClick={submitLogin}>
-            Ingresar
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="app-root no-print">
@@ -297,17 +387,32 @@ export default function App() {
 
           </nav>
 
-          <button className="logout-btn" onClick={logout} title="Cerrar sesión">
-            Salir
-          </button>
+          <div className="header-actions">
+            <button className="logout-btn" onClick={() => setShowChangePass(true)} title="Cambiar mi clave">
+              🔑
+            </button>
+            <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">
+              Salir
+            </button>
+          </div>
         </div>
       </header>
+
+      {showChangePass && <ChangePassword onClose={() => setShowChangePass(false)} />}
 
       {/* ─── Content ─── */}
       <main className="app-content">
         {activeTab === 'vender' && <VenderTab eventName={eventName} />}
         {activeTab === 'productos' && <ProductosTab />}
-        {activeTab === 'entradas' && <EntradasTab eventName={eventName} />}
+        {activeTab === 'entradas' && <EntradasTab eventName={eventName} config={config} />}
+        {activeTab === 'equipo' && (
+          <EquipoTab
+            eventName={eventName}
+            config={config}
+            onConfigChange={setConfig}
+            currentUserId={profile.id}
+          />
+        )}
         {activeTab === 'reportes' && <ReportesTab eventName={eventName} />}
       </main>
 
@@ -317,7 +422,7 @@ export default function App() {
           <div className="pass-sheet">
             <div className="pass-handle" />
             <div className="pass-icon">🔐</div>
-            <div className="pass-title">Sección de Entradas</div>
+            <div className="pass-title">{pendingTab === 'equipo' ? 'Sección RRPP' : 'Sección de Entradas'}</div>
             <p className="pass-sub">Ingresá la clave para acceder</p>
             <input
               ref={passInputRef}
