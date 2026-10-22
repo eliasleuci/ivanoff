@@ -17,17 +17,22 @@ export const isDoorTicket = (t) => t.ticket_code?.startsWith('PTA-');
 export const isSold = (t) => !isDoorTicket(t) || t.used;
 export const doorNumber = (t) => parseInt(t.buyer_name?.match(/#(\d+)/)?.[1] ?? '0', 10);
 
+// Vendidas por un admin, o sin vendedor (las anteriores a los RRPP, que generaba el admin)
+const isAdminTicket = (t) => t.seller?.role === 'admin' || (!t.seller_id && !t.seller_name);
+
 // seller_name es una copia que queda aunque el RRPP se haya eliminado
 export const sellerName = (t) =>
-  isDoorTicket(t) ? 'Puerta' : t.seller?.display_name || t.seller_name || 'Sin asignar';
+  isDoorTicket(t) ? 'Puerta'
+    : isAdminTicket(t) ? 'Administradores'
+      : t.seller?.display_name || t.seller_name;
 
 /* Resumen por vendedor (RRPP, admin, puerta) para el panel y los reportes */
 export function groupBySeller(tickets) {
   const groups = new Map();
   for (const t of tickets) {
-    const key = isDoorTicket(t)
-      ? 'door'
-      : t.seller_id || (t.seller_name ? `deleted:${t.seller_name}` : 'none');
+    const key = isDoorTicket(t) ? 'door'
+      : isAdminTicket(t) ? 'admin'
+        : t.seller_id || `deleted:${t.seller_name}`;
     if (!groups.has(key)) {
       groups.set(key, {
         key,

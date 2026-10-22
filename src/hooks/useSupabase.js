@@ -282,7 +282,7 @@ export async function validateTicket(ticketCode) {
 export async function fetchEventTickets() {
   const { data, error } = await supabase
     .from('event_tickets')
-    .select('*, seller:profiles(display_name, username)')
+    .select('*, seller:profiles(display_name, username, role)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
