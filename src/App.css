@@ -1375,13 +1375,11 @@ body {
 }
 
 /* Cards */
+/* Sin scroll propio: la lista crece y se desplaza con la página (en celular el scroll anidado cortaba las tarjetas) */
 .ls-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 .ls-card {
   display: flex;
