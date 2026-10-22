@@ -222,3 +222,6 @@ SELECT id, 'controldegestion', 'Administrador', 'admin'
   FROM auth.users
  WHERE email = 'controldegestion@pdv.local'
 ON CONFLICT (id) DO NOTHING;
+
+-- 10. Que la API de Supabase tome las columnas y funciones nuevas al instante
+NOTIFY pgrst, 'reload schema';
