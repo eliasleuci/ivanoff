@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { changeMyPassword } from '../hooks/useSupabase';
+import ThemeToggle from './ThemeToggle';
 
 /*
  * Cambio de clave del propio usuario.
@@ -79,6 +80,7 @@ export default function ChangePassword({ forced = false, onDone, onClose, onLogo
   if (forced) {
     return (
       <div className="login-screen no-print">
+        <ThemeToggle className="logout-btn theme-corner" />
         <div className="login-card">
           <div className="login-icon">🔑</div>
           <div className="login-title">Elegí tu clave</div>

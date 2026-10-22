@@ -70,15 +70,23 @@ export async function fetchProfiles() {
 
 // Altas y claves pasan por la Netlify Function, que tiene la service role key
 async function callAdminUsers(action, payload) {
+  const send = (token) =>
+    fetch('/.netlify/functions/admin-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token ?? ''}`,
+      },
+      body: JSON.stringify({ action, ...payload }),
+    });
+
   const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch('/.netlify/functions/admin-users', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session?.access_token ?? ''}`,
-    },
-    body: JSON.stringify({ action, ...payload }),
-  });
+  let res = await send(session?.access_token);
+  // El token dura 1 hora: si la pestaña quedó abierta puede haber vencido. Se renueva y se reintenta una vez.
+  if (res.status === 401) {
+    const { data } = await supabase.auth.refreshSession();
+    if (data?.session) res = await send(data.session.access_token);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
   return body;

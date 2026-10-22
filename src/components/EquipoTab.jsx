@@ -25,10 +25,39 @@ function Loading({ text }) {
 /* ══════════════════════════════════════════════════════════
    PANEL GENERAL — cuántas vendió cada RRPP
 ══════════════════════════════════════════════════════════ */
+/* Entradas de un vendedor: primero las que faltan escanear */
+function SellerTickets({ tickets }) {
+  const sorted = [...tickets].sort((a, b) => Number(a.used) - Number(b.used) || new Date(b.created_at) - new Date(a.created_at));
+  const time = (d) => new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="eq-detail">
+      {sorted.map((t) => {
+        const ti = TICKET_TYPES.find((x) => x.id === t.ticket_type) || TICKET_TYPES[0];
+        return (
+          <div key={t.id} className={`eq-detail-row ${t.used ? 'eq-detail-row--used' : ''}`}>
+            <span className="eq-detail-status">{t.used ? '✅' : '⏳'}</span>
+            <div className="eq-detail-info">
+              <span className="eq-detail-name">{t.buyer_name || 'Sin nombre'}</span>
+              <span className="eq-detail-meta">
+                <span style={{ color: ti.color }}>{ti.emoji} {t.ticket_type}</span>
+                {' · '}
+                {t.used ? `Escaneada ${time(t.used_at)}` : `Vendida ${time(t.created_at)}`}
+              </span>
+            </div>
+            <span className="eq-detail-price">{fmt(t.price)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PanelGeneral({ eventName }) {
   const [tickets, setTickets] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openKey, setOpenKey] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,7 +78,7 @@ function PanelGeneral({ eventName }) {
 
   // Incluir a los RRPP activos que todavía no vendieron
   const groups = groupBySeller(tickets);
-  const empty = { count: 0, used: 0, revenue: 0, efectivo: 0, transferencia: 0, byType: {} };
+  const empty = { count: 0, used: 0, revenue: 0, efectivo: 0, transferencia: 0, byType: {}, tickets: [] };
   for (const p of profiles) {
     if (p.role === 'rrpp' && p.active && !groups.some((g) => g.key === p.id)) {
       groups.push({ key: p.id, name: p.display_name, ...empty });
@@ -59,14 +88,13 @@ function PanelGeneral({ eventName }) {
   const total = tickets.length;
   const used = tickets.filter((t) => t.used).length;
   const revenue = tickets.reduce((s, t) => s + Number(t.price), 0);
-  const maxCount = Math.max(1, ...groups.map((g) => g.count));
-
   const downloadCSV = () => {
-    const header = ['Vendedor', 'Entradas', 'Ingresaron', ...TICKET_TYPES.map((t) => t.label), 'Efectivo', 'Transferencia', 'Total'].join(',');
+    const header = ['Vendedor', 'Vendidas', 'Escaneadas', 'Sin escanear', ...TICKET_TYPES.map((t) => t.label), 'Efectivo', 'Transferencia', 'Total'].join(',');
     const rows = groups.map((g) => [
       `"${g.name}"`,
       g.count,
       g.used,
+      g.count - g.used,
       ...TICKET_TYPES.map((t) => g.byType[t.id] || 0),
       g.efectivo,
       g.transferencia,
@@ -89,11 +117,11 @@ function PanelGeneral({ eventName }) {
         </div>
         <div className="ls-stat ls-stat--used">
           <span className="ls-stat-n">{used}</span>
-          <span className="ls-stat-l">Ingresaron</span>
+          <span className="ls-stat-l">Escaneadas</span>
         </div>
         <div className="ls-stat ls-stat--pen">
-          <span className="ls-stat-n">{profiles.filter((p) => p.role === 'rrpp' && p.active).length}</span>
-          <span className="ls-stat-l">RRPP</span>
+          <span className="ls-stat-n">{total - used}</span>
+          <span className="ls-stat-l">Sin escanear</span>
         </div>
         <div className="ls-stat ls-stat--rev">
           <span className="ls-stat-n ls-stat-n--sm">{fmt(revenue)}</span>
@@ -103,34 +131,64 @@ function PanelGeneral({ eventName }) {
 
       <div className="cierre-section">
         <div className="eq-section-head">
-          <div className="cierre-section-title">Ventas por vendedor</div>
-          <button className="ls-refresh-btn" onClick={load} title="Actualizar">↻</button>
+          <div className="cierre-section-title">
+            Ventas por vendedor · {profiles.filter((p) => p.role === 'rrpp' && p.active).length} RRPP activos
+          </div>
+          <button className="ls-refresh-btn" onClick={load} title="Actualizar" aria-label="Actualizar">↻</button>
         </div>
         {groups.length === 0 ? (
           <div className="ls-empty"><p>Todavía no hay entradas vendidas.</p></div>
         ) : (
           <div className="cierre-type-list">
-            {groups.map((g, i) => (
-              <div key={g.key} className="eq-seller-row">
-                <div className="eq-seller-top">
-                  <span className="eq-rank">{i + 1}</span>
-                  <span className="eq-seller-name">{g.name}</span>
-                  <span className="eq-seller-count">{g.count}</span>
+            {groups.map((g, i) => {
+              const open = openKey === g.key;
+              const pct = g.count ? Math.round((g.used / g.count) * 100) : 0;
+              return (
+                <div key={g.key} className="eq-seller-row">
+                  <button
+                    type="button"
+                    className="eq-seller-top"
+                    onClick={() => setOpenKey(open ? null : g.key)}
+                    disabled={g.count === 0}
+                    aria-expanded={open}
+                  >
+                    <span className="eq-rank">{i + 1}</span>
+                    <span className="eq-seller-name">{g.name}</span>
+                    {g.count > 0 && <span className="eq-seller-toggle">{open ? 'Ocultar ▲' : 'Ver entradas ▼'}</span>}
+                  </button>
+
+                  <div className="eq-seller-stats">
+                    <div className="eq-seller-stat">
+                      <span className="eq-seller-stat-n">{g.count}</span>
+                      <span className="eq-seller-stat-l">Vendidas</span>
+                    </div>
+                    <div className="eq-seller-stat eq-seller-stat--used">
+                      <span className="eq-seller-stat-n">{g.used}</span>
+                      <span className="eq-seller-stat-l">Escaneadas</span>
+                    </div>
+                    <div className="eq-seller-stat eq-seller-stat--pen">
+                      <span className="eq-seller-stat-n">{g.count - g.used}</span>
+                      <span className="eq-seller-stat-l">Sin escanear</span>
+                    </div>
+                  </div>
+
+                  <div className="eq-bar" title={`${pct}% escaneadas`}>
+                    <div className="eq-bar-fill" style={{ width: `${pct}%` }} />
+                  </div>
+
+                  <div className="eq-seller-meta">
+                    {TICKET_TYPES.filter((t) => g.byType[t.id]).map((t) => (
+                      <span key={t.id} style={{ color: t.color }}>{t.emoji} {g.byType[t.id]}</span>
+                    ))}
+                    <span>💵 {fmt(g.efectivo)}</span>
+                    <span>📲 {fmt(g.transferencia)}</span>
+                    <span className="eq-seller-total">{fmt(g.revenue)}</span>
+                  </div>
+
+                  {open && <SellerTickets tickets={g.tickets} />}
                 </div>
-                <div className="eq-bar">
-                  <div className="eq-bar-fill" style={{ width: `${(g.count / maxCount) * 100}%` }} />
-                </div>
-                <div className="eq-seller-meta">
-                  <span>{g.used} ingresaron</span>
-                  {TICKET_TYPES.filter((t) => g.byType[t.id]).map((t) => (
-                    <span key={t.id} style={{ color: t.color }}>{t.emoji} {g.byType[t.id]}</span>
-                  ))}
-                  <span>💵 {fmt(g.efectivo)}</span>
-                  <span>📲 {fmt(g.transferencia)}</span>
-                  <span className="eq-seller-total">{fmt(g.revenue)}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

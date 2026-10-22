@@ -249,7 +249,6 @@ export function QRModal({ ticket, eventName, paymentAlias, onClose }) {
 export function VenderEntrada({ config, onGenerated }) {
   const [form, setForm] = useState({
     buyerName: '',
-    buyerPhone: '',
     ticketType: 'General',
     price: '',
     paymentMethod: 'efectivo',
@@ -280,13 +279,13 @@ export function VenderEntrada({ config, onGenerated }) {
     try {
       const ticket = await sellTicket({
         buyerName: form.buyerName.trim() || 'Sin nombre',
-        buyerPhone: form.buyerPhone.trim(),
+        buyerPhone: null,
         ticketType: form.ticketType,
         price: priceNum,
         paymentMethod: form.paymentMethod,
       });
       // Reset form
-      setForm((prev) => ({ ...prev, buyerName: '', buyerPhone: '', price: '' }));
+      setForm((prev) => ({ ...prev, buyerName: '', price: '' }));
       onGenerated(ticket);
     } catch (err) {
       console.error(err);
@@ -330,25 +329,9 @@ export function VenderEntrada({ config, onGenerated }) {
           <input
             type="text"
             className="vf-input"
-            placeholder="Ej: Juan Pérez"
+            placeholder="Nombre del comprador (opcional)"
             value={form.buyerName}
             onChange={(e) => setForm((p) => ({ ...p, buyerName: e.target.value }))}
-          />
-        </div>
-
-        {/* Buyer phone */}
-        <div className="vf-section">
-          <label className="vf-label">
-            WhatsApp del comprador <span className="vf-optional">(opcional)</span>
-          </label>
-          <input
-            type="tel"
-            inputMode="numeric"
-            className="vf-input"
-            placeholder="549xxxxxxxxxx"
-            value={form.buyerPhone}
-            onChange={(e) => setForm((p) => ({ ...p, buyerPhone: e.target.value }))}
-            maxLength={20}
           />
         </div>
 
@@ -361,7 +344,7 @@ export function VenderEntrada({ config, onGenerated }) {
               type="number"
               inputMode="numeric"
               className="vf-input vf-price-input"
-              placeholder="0"
+              placeholder="Precio"
               min="0"
               value={form.price}
               onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
@@ -407,7 +390,7 @@ export function VenderEntrada({ config, onGenerated }) {
           type="submit"
           className="vf-submit"
           disabled={loading}
-          style={{ background: selectedType.color }}
+          style={{ background: selectedType.fill }}
         >
           {loading ? (
             <span className="vf-spinner" />
@@ -755,6 +738,14 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
 
   useEffect(() => { load(); }, [load, refresh]);
 
+  // Botón para volver arriba cuando la lista es larga
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 600);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const filtered = tickets.filter((t) => {
     if (filter === 'pending' && t.used) return false;
     if (filter === 'used' && !t.used) return false;
@@ -791,11 +782,11 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
         </div>
         <div className="ls-stat ls-stat--pen">
           <span className="ls-stat-n">{total - usedCount}</span>
-          <span className="ls-stat-l">Pend.</span>
+          <span className="ls-stat-l">Sin escanear</span>
         </div>
         <div className="ls-stat ls-stat--used">
           <span className="ls-stat-n">{usedCount}</span>
-          <span className="ls-stat-l">Usadas</span>
+          <span className="ls-stat-l">Escaneadas</span>
         </div>
         <div className="ls-stat ls-stat--rev">
           <span className="ls-stat-n ls-stat-n--sm">{fmt(revenue)}</span>
@@ -803,8 +794,8 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
         </div>
       </div>
 
-      {/* Filter + refresh */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* Buscador y filtros: quedan fijos debajo del header mientras se desplazan las entradas */}
+      <div className="ls-toolbar">
         <input
           type="text"
           className="ls-search-bar"
@@ -815,8 +806,8 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
         <div className="ls-filters">
         {[
           { id: 'all', label: 'Todas' },
-          { id: 'pending', label: '⏳ Pend.' },
-          { id: 'used', label: '✅ Usadas' },
+          { id: 'pending', label: '⏳ Sin escanear' },
+          { id: 'used', label: '✅ Escaneadas' },
         ].map((f) => (
           <button
             key={f.id}
@@ -826,9 +817,24 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
             {f.label}
           </button>
         ))}
-        <button className="ls-refresh-btn" onClick={load}>↻</button>
+        <button className="ls-refresh-btn" onClick={load} aria-label="Actualizar">↻</button>
       </div>
+        <div className="ls-count">
+          {filtered.length === tickets.length
+            ? `${tickets.length} entradas`
+            : `${filtered.length} de ${tickets.length} entradas`}
+        </div>
       </div>
+
+      {showTop && (
+        <button
+          className="ls-top-btn"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Volver arriba"
+        >
+          ↑
+        </button>
+      )}
 
       {/* List */}
       {filtered.length === 0 ? (
@@ -844,7 +850,7 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
               <div key={t.id} className={`ls-card ${t.used ? 'ls-card--used' : ''}`}>
                 <div
                   className="ls-card-stripe"
-                  style={{ background: t.used ? '#3f3f46' : ti.color }}
+                  style={{ background: t.used ? 'var(--color-zinc-700)' : ti.fill }}
                 />
                 <div className="ls-card-body">
                   <div className="ls-card-top">
@@ -856,7 +862,7 @@ export function ListadoEntradas({ refresh, onResend, isAdmin = true }) {
                         {ti.emoji} {t.ticket_type}
                       </span>
                       <span className={`ls-status ${t.used ? 'ls-status--used' : 'ls-status--pen'}`}>
-                        {t.used ? '✓ Usada' : '⏳ Pendiente'}
+                        {t.used ? '✓ Escaneada' : '⏳ Sin escanear'}
                       </span>
                     </div>
                     <div className="ls-card-actions">
@@ -1447,7 +1453,7 @@ function PuertaTab({ eventName }) {
               type="number"
               inputMode="numeric"
               className="vf-input vf-price-input"
-              placeholder="0"
+              placeholder="Precio"
               min="0"
               value={form.price}
               onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
@@ -1462,7 +1468,7 @@ function PuertaTab({ eventName }) {
           type="submit"
           className="vf-submit"
           disabled={generating}
-          style={{ background: selectedType.color }}
+          style={{ background: selectedType.fill }}
         >
           {generating ? <span className="vf-spinner" /> : `Generar lote de ${form.count || 0} entradas`}
         </button>
@@ -1487,7 +1493,7 @@ function PuertaTab({ eventName }) {
                 <div key={t.id} className={`ls-card ${t.used ? 'ls-card--used' : ''}`}>
                   <div
                     className="ls-card-stripe"
-                    style={{ background: t.used ? '#3f3f46' : ti.color }}
+                    style={{ background: t.used ? 'var(--color-zinc-700)' : ti.fill }}
                   />
                   <div className="ls-card-body">
                     <div className="ls-card-top">

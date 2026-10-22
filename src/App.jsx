@@ -6,6 +6,8 @@ import EntradasTab from './components/EntradasTab';
 import EquipoTab from './components/EquipoTab';
 import { RrppApp, PuertaApp } from './components/RoleViews';
 import ChangePassword from './components/ChangePassword';
+import ThemeToggle from './components/ThemeToggle';
+import { useHeaderHeightVar } from './utils/layout';
 import { supabase } from './supabaseClient';
 import {
   fetchEventConfig,
@@ -218,6 +220,7 @@ function LoginScreen() {
 
   return (
     <div className="login-screen no-print">
+      <ThemeToggle className="logout-btn theme-corner" />
       <div className="login-card">
         <div className="login-icon">🔒</div>
         <div className="login-title">Iniciar sesión</div>
@@ -252,6 +255,7 @@ function LoginScreen() {
 }
 
 function AdminApp({ profile, onLogout }) {
+  const headerRef = useHeaderHeightVar();
   // Contraseña para Entradas / RRPP
   const [entradasUnlocked, setEntradasUnlocked] = useState(
     () => sessionStorage.getItem('entradas_ok') === '1'
@@ -338,7 +342,7 @@ function AdminApp({ profile, onLogout }) {
   return (
     <div className="app-root no-print">
       {/* ─── Header ─── */}
-      <header className="app-header">
+      <header className="app-header" ref={headerRef}>
         <div className="header-inner">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🍹</span>
@@ -388,6 +392,7 @@ function AdminApp({ profile, onLogout }) {
           </nav>
 
           <div className="header-actions">
+            <ThemeToggle />
             <button className="logout-btn" onClick={() => setShowChangePass(true)} title="Cambiar mi clave">
               🔑
             </button>

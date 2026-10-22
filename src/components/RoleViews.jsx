@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { fetchEventConfig } from '../hooks/useSupabase';
 import { VenderEntrada, ListadoEntradas, EscanearEntrada, QRModal } from './EntradasTab';
 import ChangePassword from './ChangePassword';
+import ThemeToggle from './ThemeToggle';
+import { useHeaderHeightVar } from '../utils/layout';
 
 const ROLE_SUBTITLE = { rrpp: 'RRPP', puerta: 'Puerta' };
 
 /* Header simple para los usuarios del equipo (sin bar ni reportes) */
 function RoleShell({ profile, eventName, onLogout, children }) {
+  const headerRef = useHeaderHeightVar();
   const [showChangePass, setShowChangePass] = useState(false);
 
   return (
     <div className="app-root no-print">
-      <header className="app-header">
+      <header className="app-header" ref={headerRef}>
         <div className="header-inner">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🎟️</span>
@@ -25,6 +28,7 @@ function RoleShell({ profile, eventName, onLogout, children }) {
             </div>
           </div>
           <div className="header-actions">
+            <ThemeToggle />
             <button className="logout-btn" onClick={() => setShowChangePass(true)} title="Cambiar mi clave">
               🔑
             </button>

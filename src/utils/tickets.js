@@ -1,8 +1,10 @@
-/* ─── Tipos de entrada ─── */
+/* ─── Tipos de entrada ───
+   color: texto y bordes (se oscurece en tema claro, ver --tt-* en App.css)
+   fill: relleno de botones y franjas, con texto oscuro encima (igual en los dos temas) */
 export const TICKET_TYPES = [
-  { id: 'General', label: 'General', emoji: '🎟️', color: '#2dd4a8', bg: 'rgba(45,212,168,0.12)' },
-  { id: 'VIP', label: 'VIP', emoji: '⭐', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-  { id: 'Combo', label: 'Combo', emoji: '🎁', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+  { id: 'General', label: 'General', emoji: '🎟️', color: 'var(--tt-general)', fill: '#2dd4a8', bg: 'rgba(45,212,168,0.12)' },
+  { id: 'VIP', label: 'VIP', emoji: '⭐', color: 'var(--tt-vip)', fill: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  { id: 'Combo', label: 'Combo', emoji: '🎁', color: 'var(--tt-combo)', fill: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
 ];
 
 export const fmt = (n) =>
@@ -43,9 +45,11 @@ export function groupBySeller(tickets) {
         efectivo: 0,
         transferencia: 0,
         byType: {},
+        tickets: [],
       });
     }
     const g = groups.get(key);
+    g.tickets.push(t);
     g.count += 1;
     if (t.used) g.used += 1;
     g.revenue += Number(t.price);

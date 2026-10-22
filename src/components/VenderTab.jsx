@@ -155,7 +155,7 @@ export default function VenderTab({ eventName }) {
                 </span>
                 {/* In-cart badge */}
                 {inCart > 0 && (
-                  <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[10px] sm:text-xs font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-accent text-zinc-900">
+                  <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[10px] sm:text-xs font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-accent text-on-accent">
                     {inCart}
                   </span>
                 )}
@@ -282,11 +282,11 @@ export default function VenderTab({ eventName }) {
               <button
                 onClick={() => handleCheckout(true)}
                 disabled={cart.length === 0 || processing}
-                className="flex-1 py-4 rounded-xl font-display font-bold text-base transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed bg-accent text-zinc-900 hover:bg-accent/90 active:scale-[0.98] shadow-lg shadow-accent/20"
+                className="flex-1 py-4 rounded-xl font-display font-bold text-base transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed bg-accent text-on-accent hover:bg-accent/90 active:scale-[0.98] shadow-lg shadow-accent/20"
               >
                 {processing ? (
                   <>
-                    <span className="animate-spin rounded-full h-5 w-5 border-2 border-zinc-900 border-t-transparent"></span>
+                    <span className="animate-spin rounded-full h-5 w-5 border-2 border-on-accent border-t-transparent"></span>
                     ...
                   </>
                 ) : (
@@ -421,7 +421,7 @@ export default function VenderTab({ eventName }) {
                   <button
                     onClick={() => handleCheckout(true)}
                     disabled={cart.length === 0 || processing}
-                    className="flex-1 py-3.5 rounded-xl font-display font-bold text-sm transition-all duration-200 flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed bg-accent text-zinc-900 active:bg-accent/90 shadow-lg shadow-accent/20 touch-manipulation"
+                    className="flex-1 py-3.5 rounded-xl font-display font-bold text-sm transition-all duration-200 flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed bg-accent text-on-accent active:bg-accent/90 shadow-lg shadow-accent/20 touch-manipulation"
                   >
                     {processing ? 'Procesando...' : '🖨️ Cobrar e Imprimir'}
                   </button>

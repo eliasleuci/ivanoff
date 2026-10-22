@@ -29,9 +29,13 @@ export default async (req) => {
 
   // Verificar que quien llama sea un admin activo
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) return json(401, { error: 'Sesión no válida.' });
+  const expired = 'Tu sesión venció. Tocá Salir y volvé a ingresar.';
+  if (!token) return json(401, { error: expired });
   const { data: userData, error: userErr } = await admin.auth.getUser(token);
-  if (userErr || !userData?.user) return json(401, { error: 'Sesión no válida.' });
+  if (userErr || !userData?.user) {
+    console.warn('admin-users: token rechazado', userErr?.message);
+    return json(401, { error: expired });
+  }
 
   const { data: me } = await admin
     .from('profiles')
