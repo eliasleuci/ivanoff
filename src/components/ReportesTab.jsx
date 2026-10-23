@@ -4,12 +4,15 @@ import {
   fetchSales,
   fetchEventConfig,
   resetDaySales,
+  voidShiftSales,
 } from '../hooks/useSupabase';
 
 export default function ReportesTab({ eventName }) {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -47,19 +50,27 @@ export default function ReportesTab({ eventName }) {
     .filter((p) => p.type === 'botella')
     .reduce((s, p) => s + p.sold, 0);
 
-  /* ─── Reset ─── */
-  const handleReset = async () => {
+  /* ─── Reset ───
+     Cerrar el día: lo vendido ya salió, el stock queda como está.
+     Anular: ventas de prueba; se devuelve al stock lo vendido y se borran esas ventas. */
+  const runReset = async (mode) => {
     if (
+      mode === 'void' &&
       !window.confirm(
-        '⚠️ ¿Reiniciar ventas del día?\n\nEsto pondrá los vendidos en 0 y reiniciará el contador de tickets.\nLas ventas registradas NO se borran (quedan para auditoría).'
+        `¿Anular ${sales.length} ${sales.length === 1 ? 'venta' : 'ventas'} por $${totalRecaudado.toLocaleString('es-AR')} y devolver lo vendido al stock?\n\nEsto no se puede deshacer.`
       )
     )
       return;
+    setResetting(true);
     try {
-      await resetDaySales();
+      if (mode === 'void') await voidShiftSales(sales.map((s) => s.id));
+      else await resetDaySales();
+      setResetOpen(false);
       await load();
     } catch (err) {
       alert('Error: ' + err.message);
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -261,7 +272,7 @@ export default function ReportesTab({ eventName }) {
           📊 Exportar CSV
         </button>
         <button
-          onClick={handleReset}
+          onClick={() => setResetOpen(true)}
           className="sm:ml-auto px-4 sm:px-5 py-2.5 text-sm rounded-xl border border-red-800/50 text-red-400 active:bg-red-900/20 hover:bg-red-900/20 transition-colors font-display font-medium touch-manipulation"
         >
           🔄 Reiniciar ventas del día
@@ -356,6 +367,52 @@ export default function ReportesTab({ eventName }) {
           </div>
         )}
       </div>
+
+      {/* ─── Reiniciar: cerrar el día o anular ventas de prueba ─── */}
+      {resetOpen && (
+        <div
+          className="cierre-confirm-overlay"
+          onClick={(e) => e.target === e.currentTarget && !resetting && setResetOpen(false)}
+        >
+          <div className="cierre-confirm-sheet">
+            <div className="cierre-confirm-handle" />
+            <div className="cierre-confirm-title">Reiniciar ventas del día</div>
+            <p className="cierre-confirm-text">
+              En este turno: <strong>{sales.length} {sales.length === 1 ? 'venta' : 'ventas'}</strong> ·{' '}
+              <strong>${totalRecaudado.toLocaleString('es-AR')}</strong>
+            </p>
+            <button className="rp-reset-option" onClick={() => runReset('close')} disabled={resetting}>
+              <span className="rp-reset-icon">🌙</span>
+              <span>
+                <span className="rp-reset-name">Cerrar el día</span>
+                <span className="rp-reset-desc">
+                  Pone en 0 lo vendido y el contador de tickets. El stock queda como está, porque lo vendido ya salió.
+                </span>
+              </span>
+            </button>
+            <button
+              className="rp-reset-option rp-reset-option--danger"
+              onClick={() => runReset('void')}
+              disabled={resetting || sales.length === 0}
+            >
+              <span className="rp-reset-icon">↩️</span>
+              <span>
+                <span className="rp-reset-name">Anular ventas de prueba</span>
+                <span className="rp-reset-desc">
+                  Devuelve al stock todo lo vendido en este turno y borra esas ventas.
+                </span>
+              </span>
+            </button>
+            <button
+              className="cierre-confirm-cancel rp-reset-cancel"
+              onClick={() => setResetOpen(false)}
+              disabled={resetting}
+            >
+              {resetting ? 'Procesando…' : 'Cancelar'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

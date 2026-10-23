@@ -245,6 +245,34 @@ export async function resetDaySales() {
   console.log('[resetDaySales] Reseteo exitoso.');
 }
 
+// Anula las ventas del turno (p. ej. ventas de prueba): devuelve al stock lo vendido,
+// borra esas ventas y reinicia los contadores como resetDaySales.
+export async function voidShiftSales(saleIds) {
+  const { data: products, error: fetchErr } = await supabase
+    .from('products')
+    .select('id, stock, sold');
+  if (fetchErr) throw fetchErr;
+
+  const results = await Promise.all(
+    products
+      .filter((p) => p.sold > 0)
+      .map((p) => supabase.from('products').update({ stock: p.stock + p.sold, sold: 0 }).eq('id', p.id))
+  );
+  const failed = results.find((r) => r.error);
+  if (failed) throw failed.error;
+
+  if (saleIds.length > 0) {
+    const { error: delErr } = await supabase.from('sales').delete().in('id', saleIds);
+    if (delErr) throw delErr;
+  }
+
+  const { error: cfgErr } = await supabase
+    .from('event_config')
+    .update({ ticket_counter: 1 })
+    .eq('id', 1);
+  if (cfgErr) throw cfgErr;
+}
+
 /* ───────────────── EVENT TICKETS ───────────────── */
 
 // La entrada queda a nombre de quien la vende (admin o RRPP)
