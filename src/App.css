@@ -2669,3 +2669,17 @@ body {
 /* Filtros del listado: se deslizan con el dedo, sin barra visible */
 .ls-filters { scrollbar-width: none; }
 .ls-filters::-webkit-scrollbar { display: none; }
+
+/* Recaudado en su propia fila en celular: con montos de millones el número entra completo */
+@media (max-width: 640px) {
+  .ls-stats { grid-template-columns: repeat(3, 1fr); }
+  .ls-stat--rev {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+  }
+  .ls-stat--rev .ls-stat-l { order: -1; font-size: 12px; }
+  .ls-stat--rev .ls-stat-n--sm { font-size: 20px; overflow: visible; }
+}
