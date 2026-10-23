@@ -21,22 +21,11 @@ export default function ReportesTab({ eventName }) {
       ]);
       setProducts(prods || []);
       
-      const allSales = sls || [];
-      // Filtrar solo las ventas del turno actual (ticket_num decreciente)
-      if (config.ticket_counter === 1) {
-        setSales([]);
-      } else {
-        const shiftSales = [];
-        let expectedNext = null;
-        for (const sale of allSales) {
-          if (expectedNext !== null && sale.ticket_num >= expectedNext) {
-            break; // cruzamos al turno anterior
-          }
-          shiftSales.push(sale);
-          expectedNext = sale.ticket_num;
-        }
-        setSales(shiftSales);
-      }
+      // Ventas del turno actual: el contador arranca en 1 al reiniciar y suma 1 por venta,
+      // así que son las últimas (contador - 1) ventas por fecha. No se puede usar el número
+      // de ticket para cortar: después de reiniciar, las ventas viejas tienen números más altos.
+      const allSales = sls || []; // ordenadas por fecha, más nuevas primero
+      setSales(allSales.slice(0, Math.max(0, config.ticket_counter - 1)));
     } catch (err) {
       console.error(err);
     } finally {
