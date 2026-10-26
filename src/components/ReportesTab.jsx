@@ -13,6 +13,7 @@ export default function ReportesTab({ eventName }) {
   const [loading, setLoading] = useState(true);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -105,132 +106,18 @@ export default function ReportesTab({ eventName }) {
     URL.revokeObjectURL(url);
   };
 
-  /* ─── HTML Comprobante ─── */
-  const handleComprobante = () => {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('es-AR');
-    const timeStr = now.toLocaleTimeString('es-AR');
-
-    // Product detail: recaudado and stock by product
-    const productDetail = products
-      .map((p) => {
-        const recaudado = p.sold * Number(p.price);
-        return `
-          <tr>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;">${p.name}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:center;">
-              ${p.type === 'botella' ? '🍾' : '🥤'} ${p.type}
-            </td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:right;">$${Number(p.price).toLocaleString('es-AR')}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:right;">${p.sold}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:right;">$${recaudado.toLocaleString('es-AR')}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:right;">${p.stock}</td>
-          </tr>`;
-      })
-      .join('');
-
-    // Sales history
-    const salesHistory = sales
-      .map((sale) => {
-        const d = new Date(sale.created_at);
-        const items = Array.isArray(sale.items) ? sale.items : [];
-        const itemsList = items.map((it) => `${it.qty}x ${it.name}`).join(', ');
-        return `
-          <tr>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:center;">#${String(sale.ticket_num).padStart(4, '0')}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;">${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;">${itemsList}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #ddd;text-align:right;">$${Number(sale.total).toLocaleString('es-AR')}</td>
-          </tr>`;
-      })
-      .join('');
-
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Comprobante - ${eventName || 'Evento'}</title>
-  <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #222; }
-    h1 { font-size: 24px; margin-bottom: 4px; }
-    h2 { font-size: 18px; color: #555; margin-top: 30px; border-bottom: 2px solid #2dd4a8; padding-bottom: 6px; }
-    .meta { color: #777; font-size: 14px; margin-bottom: 20px; }
-    .summary { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
-    .summary-card { background: #f8f8f8; border-radius: 8px; padding: 16px 24px; min-width: 160px; }
-    .summary-card .label { font-size: 12px; color: #888; text-transform: uppercase; }
-    .summary-card .value { font-size: 24px; font-weight: bold; color: #222; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-    th { background: #f0f0f0; padding: 8px 12px; text-align: left; border-bottom: 2px solid #ccc; }
-    .firma { display: flex; gap: 80px; margin-top: 60px; }
-    .firma-box { flex: 1; text-align: center; border-top: 1px solid #999; padding-top: 8px; font-size: 13px; color: #666; }
-    @media print { body { margin: 20px; } }
-  </style>
-</head>
-<body>
-  <h1>${eventName || 'Evento'}</h1>
-  <p class="meta">Comprobante de ventas del día — ${dateStr} ${timeStr}</p>
-
-  <div class="summary">
-    <div class="summary-card">
-      <div class="label">Total recaudado</div>
-      <div class="value">$${totalRecaudado.toLocaleString('es-AR')}</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Tickets emitidos</div>
-      <div class="value">${ticketsEmitidos}</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Vasos vendidos</div>
-      <div class="value">${vasosVendidos}</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Botellas vendidas</div>
-      <div class="value">${botellasVendidas}</div>
-    </div>
-  </div>
-
-  <h2>Detalle por producto</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Producto</th>
-        <th style="text-align:center;">Tipo</th>
-        <th style="text-align:right;">Precio</th>
-        <th style="text-align:right;">Vendidos</th>
-        <th style="text-align:right;">Recaudado</th>
-        <th style="text-align:right;">Stock restante</th>
-      </tr>
-    </thead>
-    <tbody>${productDetail}</tbody>
-  </table>
-
-  <h2>Historial de tickets</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:center;">Ticket</th>
-        <th>Hora</th>
-        <th>Items</th>
-        <th style="text-align:right;">Total</th>
-      </tr>
-    </thead>
-    <tbody>${salesHistory}</tbody>
-  </table>
-
-  <div class="firma">
-    <div class="firma-box">Responsable de caja</div>
-    <div class="firma-box">Supervisor / Organizador</div>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `comprobante_${new Date().toISOString().slice(0, 10)}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /* ─── Reporte PDF ─── */
+  const handlePdf = async () => {
+    setDownloading(true);
+    try {
+      const { downloadBarReport } = await import('../utils/reports');
+      downloadBarReport({ eventName, sales, products });
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo generar el PDF: ' + err.message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) {
@@ -265,8 +152,12 @@ export default function ReportesTab({ eventName }) {
 
       {/* ─── Actions ─── */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-        <button onClick={handleComprobante} className="btn-outline px-4 sm:px-5 py-2.5 text-sm touch-manipulation">
-          📄 Descargar comprobante
+        <button
+          onClick={handlePdf}
+          disabled={downloading}
+          className="btn-accent px-4 sm:px-5 py-2.5 text-sm touch-manipulation disabled:opacity-60"
+        >
+          {downloading ? 'Generando PDF…' : '📄 Descargar reporte PDF'}
         </button>
         <button onClick={handleCSV} className="btn-outline px-4 sm:px-5 py-2.5 text-sm touch-manipulation">
           📊 Exportar CSV

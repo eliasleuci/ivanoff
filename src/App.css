@@ -2708,3 +2708,7 @@ body {
 .rp-reset-name { font-size: 15px; font-weight: 700; }
 .rp-reset-desc { font-size: 13px; color: var(--color-zinc-500); line-height: 1.35; }
 .rp-reset-cancel { width: 100%; }
+
+/* Botón principal de descarga (reporte PDF) */
+.cierre-dl-btn--main { border-color: var(--color-accent); background: var(--tint-accent-bg); }
+.cierre-dl-btn--main .cierre-dl-name { color: var(--color-accent); }

@@ -58,6 +58,20 @@ function PanelGeneral({ eventName }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openKey, setOpenKey] = useState(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { downloadRrppReport } = await import('../utils/reports');
+      downloadRrppReport({ eventName, tickets, profiles });
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo generar el PDF: ' + err.message);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,13 +207,22 @@ function PanelGeneral({ eventName }) {
         )}
       </div>
 
-      <button className="cierre-dl-btn" onClick={downloadCSV} disabled={groups.length === 0}>
-        <span className="cierre-dl-icon">📊</span>
-        <div>
-          <div className="cierre-dl-name">Descargar planilla por RRPP</div>
-          <div className="cierre-dl-desc">Para contar y pagarle a cada uno</div>
-        </div>
-      </button>
+      <div className="cierre-dl-grid">
+        <button className="cierre-dl-btn cierre-dl-btn--main" onClick={downloadPdf} disabled={groups.length === 0 || pdfBusy}>
+          <span className="cierre-dl-icon">📄</span>
+          <div>
+            <div className="cierre-dl-name">{pdfBusy ? 'Generando…' : 'Rendición PDF'}</div>
+            <div className="cierre-dl-desc">Cada RRPP con sus entradas, para contar y pagar</div>
+          </div>
+        </button>
+        <button className="cierre-dl-btn" onClick={downloadCSV} disabled={groups.length === 0}>
+          <span className="cierre-dl-icon">📊</span>
+          <div>
+            <div className="cierre-dl-name">Planilla CSV</div>
+            <div className="cierre-dl-desc">Abrir en Excel / Sheets</div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }

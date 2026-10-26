@@ -923,11 +923,14 @@ function CierreTab({ eventName, onReset }) {
   const [confirmText, setConfirmText] = useState('');
   const [resetDone, setResetDone] = useState(false);
   const [doorUnsold, setDoorUnsold] = useState(0);
+  const [allTickets, setAllTickets] = useState([]);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchEventTickets();
+      setAllTickets(data);
       setTickets(data.filter(isSold));
       setDoorUnsold(data.filter((t) => isDoorTicket(t) && !t.used).length);
     } catch (e) {
@@ -1006,46 +1009,18 @@ function CierreTab({ eventName, onReset }) {
     URL.revokeObjectURL(url);
   };
 
-  /* ─ Descargar TXT resumen ─ */
-  const downloadTXT = () => {
-    const now = new Date();
-    const lines = [
-      `════════════════════════════════════════`,
-      `  REPORTE DE CIERRE`,
-      `  ${(eventName || 'Evento').toUpperCase()}`,
-      `  ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`,
-      `════════════════════════════════════════`,
-      ``,
-      `RESUMEN GENERAL`,
-      `  Total entradas vendidas : ${total}`,
-      `  Entradas usadas         : ${used}`,
-      `  Entradas pendientes     : ${pending}`,
-      `  Recaudación total       : ${fmt(revenue)}`,
-      `  Puerta sin vender       : ${doorUnsold}`,
-      ``,
-      `BREAKDOWN POR TIPO`,
-      ...byType.map((t) => `  ${t.label.padEnd(12)}: ${t.count} entradas — ${fmt(t.revenue)} — ${t.used} ingresaron`),
-      ``,
-      `BREAKDOWN POR MÉTODO DE PAGO`,
-      ...byPayment.map((p) => `  ${p.label.padEnd(18)}: ${p.count} entradas — ${fmt(p.revenue)}`),
-      ``,
-      `POR VENDEDOR`,
-      ...bySeller.map((s) => `  ${s.name.padEnd(18)}: ${s.count} entradas — ${s.used} ingresaron — ${fmt(s.revenue)}`),
-      ``,
-      `════════════════════════════════════════`,
-      `DETALLE DE ENTRADAS`,
-      `════════════════════════════════════════`,
-      ...tickets.map((t, i) =>
-        `${String(i + 1).padStart(3, ' ')}. [${t.used ? 'USADA  ' : 'PENDING'}] ${(t.buyer_name || 'Sin nombre').padEnd(20)} ${t.ticket_type.padEnd(8)} ${fmt(t.price)}`
-      ),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte-cierre-${now.toLocaleDateString('es-AR').replace(/\//g, '-')}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /* ─ Reporte PDF completo ─ */
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { downloadTicketsReport } = await import('../utils/reports');
+      downloadTicketsReport({ eventName, tickets: allTickets });
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo generar el PDF: ' + err.message);
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   /* ─ Reset ─ */
@@ -1175,18 +1150,18 @@ function CierreTab({ eventName, onReset }) {
       <div className="cierre-section">
         <div className="cierre-section-title">📅 Descargar reporte</div>
         <div className="cierre-dl-grid">
+          <button className="cierre-dl-btn cierre-dl-btn--main" onClick={downloadPdf} disabled={pdfBusy}>
+            <span className="cierre-dl-icon">📄</span>
+            <div>
+              <div className="cierre-dl-name">{pdfBusy ? 'Generando…' : 'Reporte PDF'}</div>
+              <div className="cierre-dl-desc">Completo: tipos, pagos, vendedores y detalle</div>
+            </div>
+          </button>
           <button className="cierre-dl-btn" onClick={downloadCSV}>
             <span className="cierre-dl-icon">📊</span>
             <div>
               <div className="cierre-dl-name">Planilla CSV</div>
               <div className="cierre-dl-desc">Abrir en Excel / Sheets</div>
-            </div>
-          </button>
-          <button className="cierre-dl-btn" onClick={downloadTXT}>
-            <span className="cierre-dl-icon">📝</span>
-            <div>
-              <div className="cierre-dl-name">Resumen TXT</div>
-              <div className="cierre-dl-desc">Reporte de texto plano</div>
             </div>
           </button>
         </div>
